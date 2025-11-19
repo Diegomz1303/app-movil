@@ -15,19 +15,14 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
-import LottieView from 'lottie-react-native'; // Importamos Lottie
+import LottieView from 'lottie-react-native'; 
 
+// --- IMPORTANTE: Importamos los colores globales ---
+import { COLORES } from '../constants/colors';
+
+// Tipado básico para la navegación
 type NavigationProps = {
   navigate: (screen: string) => void;
-};
-
-// --- Colores ---
-const COLORES = {
-  principal: '#007bff',
-  principalClaro: '#F0F4F7',
-  texto: '#333',
-  textoSecundario: '#888',
-  fondoBlanco: '#FFFFFF',
 };
 
 export default function LoginScreen() {
@@ -36,7 +31,6 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const navigation = useNavigation<NavigationProps>();
 
-  // --- Función de Login con Supabase ---
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Campos incompletos', 'Por favor ingresa tu correo y contraseña.');
@@ -51,18 +45,17 @@ export default function LoginScreen() {
     setLoading(false);
 
     if (error) {
-      // Usamos un mensaje más amigable para "Invalid login credentials"
       if (error.message === 'Invalid login credentials') {
         Alert.alert('Error', 'Correo o contraseña incorrectos.');
       } else {
         Alert.alert('Error al Ingresar', error.message);
       }
     }
-    // No navegamos; el listener de App.tsx lo hará
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      {/* StatusBar con el color principal (Verde) */}
       <StatusBar barStyle="light-content" backgroundColor={COLORES.principal} />
 
       <KeyboardAvoidingView
@@ -70,9 +63,8 @@ export default function LoginScreen() {
         style={styles.container}
       >
         <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-          {/* --- 1. EL CABEZAL DE COLOR --- */}
+          {/* --- 1. EL CABEZAL DE COLOR (Ahora Verde) --- */}
           <View style={styles.headerContainer}>
-            {/* --- Animación Lottie --- */}
             <LottieView
               source={require('../assets/pet-animation.json')}
               style={styles.lottieAnimation}
@@ -87,7 +79,7 @@ export default function LoginScreen() {
           <View style={styles.formContainer}>
             <Text style={styles.formTitle}>Login</Text>
 
-            {/* Input de Email con icono */}
+            {/* Input de Email */}
             <View style={styles.inputContainer}>
               <MaterialCommunityIcons
                 name="email-outline"
@@ -107,7 +99,7 @@ export default function LoginScreen() {
               />
             </View>
 
-            {/* Input de Contraseña con icono */}
+            {/* Input de Contraseña */}
             <View style={styles.inputContainer}>
               <MaterialCommunityIcons
                 name="lock-outline"
@@ -126,7 +118,7 @@ export default function LoginScreen() {
               />
             </View>
 
-            {/* --- Botón con estado de carga --- */}
+            {/* Botón de Ingresar (Verde) */}
             <TouchableOpacity
               style={[styles.button, loading && styles.buttonDisabled]}
               onPress={handleLogin}
@@ -137,7 +129,7 @@ export default function LoginScreen() {
               </Text>
             </TouchableOpacity>
 
-            {/* Botón para Registrarse */}
+            {/* Link a Registro */}
             <View style={styles.registerContainer}>
               <Text style={styles.registerText}>¿No tienes cuenta? </Text>
               <TouchableOpacity
@@ -154,18 +146,17 @@ export default function LoginScreen() {
   );
 }
 
-// --- Estilos ---
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: COLORES.principal,
+    backgroundColor: COLORES.principal, // Fondo verde detrás de la status bar
   },
   container: {
     flex: 1,
-    backgroundColor: COLORES.principalClaro,
+    backgroundColor: COLORES.fondoGris, // Usamos fondoGris en lugar de principalClaro
   },
   headerContainer: {
-    backgroundColor: COLORES.principal,
+    backgroundColor: COLORES.principal, // Cabecera Verde
     paddingTop: 30,
     paddingBottom: 50,
     paddingHorizontal: 30,
@@ -209,7 +200,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORES.principalClaro,
+    backgroundColor: COLORES.fondoGris, // Input con fondo gris claro verdoso
     borderRadius: 12,
     marginBottom: 15,
     height: 55,
@@ -228,7 +219,7 @@ const styles = StyleSheet.create({
   button: {
     width: '100%',
     height: 55,
-    backgroundColor: COLORES.principal,
+    backgroundColor: COLORES.principal, // Botón verde
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -255,11 +246,11 @@ const styles = StyleSheet.create({
     color: COLORES.textoSecundario,
   },
   registerButtonText: {
-    color: COLORES.principal,
+    color: COLORES.principal, // Link verde
     fontSize: 16,
     fontWeight: 'bold',
   },
   buttonDisabled: {
-    backgroundColor: '#999',
+    backgroundColor: COLORES.inactivo, // Usamos el color inactivo del tema
   },
 });
