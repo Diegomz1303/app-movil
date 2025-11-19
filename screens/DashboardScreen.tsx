@@ -2,38 +2,45 @@ import React, { useState } from 'react';
 import { StyleSheet, View, SafeAreaView, StatusBar } from 'react-native';
 import { COLORES } from '../constants/colors';
 
-// Componentes
+// Componentes de Pantallas
 import HomeTab from '../components/dashboard/HomeTab';
 import CitasTab from '../components/dashboard/CitasTab';
-import ClientesTab from '../components/dashboard/ClientesTab'; // Importamos el nuevo
+import ClientesTab from '../components/dashboard/ClientesTab';
 import PerfilTab from '../components/dashboard/PerfilTab';
-import BottomNavBar from '../components/ui/BottomNavBar';
-import AddClientModal from '../components/modals/AddClientModal';
 
-// Actualizamos el tipo
+// Componentes UI
+import BottomNavBar from '../components/ui/BottomNavBar';
+
+// Modales
+import AddClientModal from '../components/modals/AddClientModal';
+import PetsListModal from '../components/modals/PetsListModal';
+
+// Tipo de pestañas
 type TabType = 'Home' | 'Citas' | 'Clientes' | 'Perfil';
 
 export default function DashboardScreen() {
+  // Estado de la pestaña activa
   const [activeTab, setActiveTab] = useState<TabType>('Home');
   
-  // Estado para controlar el Modal GLOBALMENTE
-  const [modalVisible, setModalVisible] = useState(false);
+  // Estados para controlar los Modales
+  const [modalVisible, setModalVisible] = useState(false);        // Modal Agregar Cliente
+  const [petsModalVisible, setPetsModalVisible] = useState(false); // Modal Buscar Mascotas
   
-  // Estado "gatillo" para avisar a la lista de clientes que se actualice
+  // Estado "gatillo" para actualizar la lista de clientes
   const [clientesRefreshTrigger, setClientesRefreshTrigger] = useState(0);
 
+  // Función para abrir modal de cliente (Click corto en +)
   const handleAddClick = () => {
     setModalVisible(true);
   };
 
+  // Función cuando se agrega un cliente exitosamente
   const handleClientAdded = () => {
-    // Cambiamos este número para "avisar" a ClientesTab que recargue
-    setClientesRefreshTrigger(prev => prev + 1);
-    
-    // Opcional: Si quieres que al agregar un cliente te lleve a la lista automáticamente:
-    setActiveTab('Clientes'); 
+    setClientesRefreshTrigger(prev => prev + 1); // Recarga la lista
+    setActiveTab('Clientes'); // Cambia a la pestaña de clientes
   };
 
+  // Renderizado condicional de las pestañas
   const renderContent = () => {
     switch (activeTab) {
       case 'Home':
@@ -41,7 +48,6 @@ export default function DashboardScreen() {
       case 'Citas':
         return <CitasTab />;
       case 'Clientes':
-        // Le pasamos el trigger para que sepa cuando recargar
         return <ClientesTab refreshTrigger={clientesRefreshTrigger} />;
       case 'Perfil':
         return <PerfilTab />;
@@ -58,17 +64,25 @@ export default function DashboardScreen() {
         {renderContent()}
       </View>
 
+      {/* Barra de Navegación con Menú Desplegable */}
       <BottomNavBar 
         activeTab={activeTab} 
         onTabChange={setActiveTab} 
         onAddClick={handleAddClick}
+        onPetsClick={() => setPetsModalVisible(true)} // Abre el modal de mascotas
       />
 
-      {/* El Modal ahora vive aquí, disponible en TODAS las pestañas */}
+      {/* Modal: Agregar Cliente */}
       <AddClientModal 
         visible={modalVisible} 
         onClose={() => setModalVisible(false)}
         onClientAdded={handleClientAdded}
+      />
+
+      {/* Modal: Buscador de Mascotas (Directorio) */}
+      <PetsListModal
+        visible={petsModalVisible}
+        onClose={() => setPetsModalVisible(false)}
       />
     </SafeAreaView>
   );
@@ -81,6 +95,6 @@ const styles = StyleSheet.create({
   },
   mainContainer: {
     flex: 1,
-    marginBottom: 70, 
+    marginBottom: 70, // Espacio para la BottomBar
   },
 });
