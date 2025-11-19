@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal,
   View,
@@ -10,11 +10,22 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  ScrollView
+  ScrollView,
+  Animated,
+  Dimensions,
+  LayoutAnimation,
+  UIManager
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { COLORES } from '../../constants/colors';
+
+// Habilitar animaciones en Android
+if (Platform.OS === 'android') {
+  if (UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+}
 
 interface AddClientModalProps {
   visible: boolean;
@@ -23,28 +34,44 @@ interface AddClientModalProps {
 }
 
 export default function AddClientModal({ visible, onClose, onClientAdded }: AddClientModalProps) {
-  // Estados para todos los campos de la imagen
+  
+  const scaleValue = useRef(new Animated.Value(0)).current;
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      setShowSuccess(false); 
+      scaleValue.setValue(0);
+      Animated.spring(scaleValue, {
+        toValue: 1,
+        friction: 7, 
+        tension: 40, 
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible]);
+
   const [nombres, setNombres] = useState('');
   const [apellidos, setApellidos] = useState('');
   const [correo, setCorreo] = useState('');
   const [telefono, setTelefono] = useState('');
-  
-  // Estado para el selector de documento
   const [tipoDocumento, setTipoDocumento] = useState('DNI');
   const [showDropdown, setShowDropdown] = useState(false);
-  
   const [numeroDocumento, setNumeroDocumento] = useState('');
   const [distrito, setDistrito] = useState('');
   const [contactoEmergencia, setContactoEmergencia] = useState('');
   const [telefonoEmergencia, setTelefonoEmergencia] = useState('');
-  
   const [loading, setLoading] = useState(false);
-
+  
   const documentos = ['DNI', 'Carnet de Extranjería', 'Pasaporte'];
 
   const handleSave = async () => {
-    setLoading(true);
+    if (!nombres || !telefono) {
+      Alert.alert("Atención", "El nombre y teléfono son obligatorios.");
+      return;
+    }
 
+    setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
@@ -53,7 +80,6 @@ export default function AddClientModal({ visible, onClose, onClientAdded }: AddC
       return;
     }
 
-    // Enviamos los datos (todos son opcionales, no hay validación if/else)
     const { error } = await supabase.from('clientes').insert({
       nombres,
       apellidos,
@@ -72,270 +98,231 @@ export default function AddClientModal({ visible, onClose, onClientAdded }: AddC
     if (error) {
       Alert.alert('Error al guardar', error.message);
     } else {
-      Alert.alert('¡Éxito!', 'Cliente registrado correctamente.');
-      // Limpiar formulario
-      setNombres('');
-      setApellidos('');
-      setCorreo('');
-      setTelefono('');
-      setNumeroDocumento('');
-      setDistrito('');
-      setContactoEmergencia('');
-      setTelefonoEmergencia('');
-      setTipoDocumento('DNI');
+      // Animación suave de cambio de tamaño
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setShowSuccess(true);
       
-      onClientAdded();
-      onClose();
+      // Cierra automáticamente después de 2 segundos
+      setTimeout(() => {
+        limpiarFormulario();
+        onClientAdded();
+        onClose();
+      }, 2000); 
     }
   };
 
-  return (
-    <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.centeredView}>
-        <View style={styles.modalView}>
-          
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.modalTitle}>Registrar Cliente</Text>
-            <TouchableOpacity onPress={onClose}>
-              <MaterialCommunityIcons name="close" size={24} color={COLORES.textoSecundario} />
-            </TouchableOpacity>
+  const limpiarFormulario = () => {
+    setNombres('');
+    setApellidos('');
+    setCorreo('');
+    setTelefono('');
+    setNumeroDocumento('');
+    setDistrito('');
+    setContactoEmergencia('');
+    setTelefonoEmergencia('');
+    setTipoDocumento('DNI');
+    setShowSuccess(false);
+  };
+
+  // --- AQUÍ ESTÁ EL CAMBIO CLAVE ---
+  const renderContent = () => {
+    if (showSuccess) {
+      return (
+        <View style={styles.successContainer}>
+          {/* Usamos un Icono Nativo Gigante en lugar de Lottie para asegurar que se vea */}
+          <MaterialCommunityIcons 
+            name="check-circle" 
+            size={100} 
+            color={COLORES.principal} 
+            style={{ marginBottom: 20 }}
+          />
+          <Text style={styles.successText}>¡Cliente Registrado!</Text>
+          <Text style={styles.successSubText}>Se ha guardado correctamente.</Text>
+        </View>
+      );
+    }
+
+    return (
+      <>
+        <View style={styles.header}>
+          <Text style={styles.modalTitle}>Registrar Cliente</Text>
+          <TouchableOpacity onPress={onClose} style={styles.closeIcon}>
+            <MaterialCommunityIcons name="close" size={24} color={COLORES.textoSecundario} />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.row}>
+            <View style={styles.halfInput}>
+              <Text style={styles.label}>Nombres *</Text>
+              <TextInput style={styles.input} value={nombres} onChangeText={setNombres} />
+            </View>
+            <View style={styles.halfInput}>
+              <Text style={styles.label}>Apellidos *</Text>
+              <TextInput style={styles.input} value={apellidos} onChangeText={setApellidos} />
+            </View>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-            
-            {/* Nombres y Apellidos */}
-            <View style={styles.row}>
-              <View style={styles.halfInput}>
-                <Text style={styles.label}>Nombres</Text>
-                <TextInput style={styles.input} value={nombres} onChangeText={setNombres} />
-              </View>
-              <View style={styles.halfInput}>
-                <Text style={styles.label}>Apellidos</Text>
-                <TextInput style={styles.input} value={apellidos} onChangeText={setApellidos} />
-              </View>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Correo Electrónico (Opcional)</Text>
+            <TextInput style={styles.input} value={correo} onChangeText={setCorreo} keyboardType="email-address" autoCapitalize="none" />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Teléfono *</Text>
+            <TextInput style={styles.input} value={telefono} onChangeText={setTelefono} keyboardType="phone-pad" placeholder="987654321" placeholderTextColor="#CCC" />
+          </View>
+
+          <View style={[styles.row, {zIndex: 10}]}> 
+            <View style={styles.halfInput}>
+              <Text style={styles.label}>Tipo de Documento</Text>
+              <TouchableOpacity style={styles.dropdownButton} onPress={() => setShowDropdown(!showDropdown)}>
+                <Text style={styles.dropdownText} numberOfLines={1}>{tipoDocumento}</Text>
+                <MaterialCommunityIcons name="chevron-down" size={20} color={COLORES.texto} />
+              </TouchableOpacity>
+              {showDropdown && (
+                <View style={styles.dropdownList}>
+                  {documentos.map((doc) => (
+                    <TouchableOpacity key={doc} style={styles.dropdownItem} onPress={() => { setTipoDocumento(doc); setShowDropdown(false); }}>
+                      <Text style={styles.dropdownItemText}>{doc}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </View>
-
-            {/* Correo */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Correo Electrónico (Opcional)</Text>
-              <TextInput 
-                style={styles.input} 
-                value={correo} 
-                onChangeText={setCorreo} 
-                keyboardType="email-address" 
-                autoCapitalize="none"
-              />
+            <View style={styles.halfInput}>
+              <Text style={styles.label}>Número</Text>
+              <TextInput style={styles.input} value={numeroDocumento} onChangeText={setNumeroDocumento} keyboardType="numeric" />
             </View>
+          </View>
 
-            {/* Teléfono */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Teléfono</Text>
-              <TextInput 
-                style={styles.input} 
-                value={telefono} 
-                onChangeText={setTelefono} 
-                keyboardType="phone-pad" 
-                placeholder="987654321"
-                placeholderTextColor="#CCC"
-              />
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Distrito *</Text>
+            <TextInput style={styles.input} value={distrito} onChangeText={setDistrito} placeholder="Ica" placeholderTextColor="#CCC"/>
+          </View>
+
+          <View style={styles.row}>
+            <View style={styles.halfInput}>
+              <Text style={styles.label}>Contacto Emergencia</Text>
+              <TextInput style={styles.input} value={contactoEmergencia} onChangeText={setContactoEmergencia} />
             </View>
-
-            {/* Documento (Tipo y Número) */}
-            <View style={styles.row}>
-              <View style={styles.halfInput}>
-                <Text style={styles.label}>Tipo de Documento</Text>
-                <TouchableOpacity 
-                  style={styles.dropdownButton} 
-                  onPress={() => setShowDropdown(!showDropdown)}
-                >
-                  <Text style={styles.dropdownText}>{tipoDocumento}</Text>
-                  <MaterialCommunityIcons name="chevron-down" size={20} color={COLORES.texto} />
-                </TouchableOpacity>
-                
-                {/* Menú desplegable personalizado */}
-                {showDropdown && (
-                  <View style={styles.dropdownList}>
-                    {documentos.map((doc) => (
-                      <TouchableOpacity 
-                        key={doc} 
-                        style={styles.dropdownItem}
-                        onPress={() => {
-                          setTipoDocumento(doc);
-                          setShowDropdown(false);
-                        }}
-                      >
-                        <Text style={styles.dropdownItemText}>{doc}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.halfInput}>
-                <Text style={styles.label}>Número</Text>
-                <TextInput 
-                  style={styles.input} 
-                  value={numeroDocumento} 
-                  onChangeText={setNumeroDocumento} 
-                  keyboardType="numeric"
-                />
-              </View>
+            <View style={styles.halfInput}>
+              <Text style={styles.label}>Teléfono Emergencia</Text>
+              <TextInput style={styles.input} value={telefonoEmergencia} onChangeText={setTelefonoEmergencia} keyboardType="phone-pad" />
             </View>
+          </View>
 
-            {/* Distrito */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Distrito</Text>
-              <TextInput style={styles.input} value={distrito} onChangeText={setDistrito} placeholder="Ica" placeholderTextColor="#CCC"/>
-            </View>
+          <View style={styles.footer}>
+            <TouchableOpacity style={styles.btnCancel} onPress={onClose}>
+                <Text style={styles.textCancel}>Cancelar</Text>
+            </TouchableOpacity>
 
-            {/* Emergencia */}
-            <View style={styles.row}>
-              <View style={styles.halfInput}>
-                <Text style={styles.label}>Contacto Emergencia</Text>
-                <TextInput style={styles.input} value={contactoEmergencia} onChangeText={setContactoEmergencia} />
-              </View>
-              <View style={styles.halfInput}>
-                <Text style={styles.label}>Teléfono Emergencia</Text>
-                <TextInput 
-                  style={styles.input} 
-                  value={telefonoEmergencia} 
-                  onChangeText={setTelefonoEmergencia} 
-                  keyboardType="phone-pad"
-                />
-              </View>
-            </View>
-
-            {/* Botón Guardar */}
-            <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={loading}>
+            <TouchableOpacity style={styles.btnSave} onPress={handleSave} disabled={loading}>
               {loading ? (
                 <ActivityIndicator color={COLORES.textoSobrePrincipal} />
               ) : (
-                <Text style={styles.saveButtonText}>Guardar</Text>
+                <Text style={styles.textSave}>Guardar</Text>
               )}
             </TouchableOpacity>
-            
-            {/* Espacio extra al final */}
-            <View style={{ height: 20 }} />
+          </View>
+          <View style={{ height: 20 }} />
+        </ScrollView>
+      </>
+    );
+  };
 
-          </ScrollView>
-        </View>
+  return (
+    <Modal animationType="fade" transparent={true} visible={visible} onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.centeredView}>
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose} />
+        <Animated.View style={[styles.modalView, { transform: [{ scale: scaleValue }] }]}>
+          {renderContent()}
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   );
 }
 
+const { width, height } = Dimensions.get('window');
+
 const styles = StyleSheet.create({
   centeredView: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+  },
+  overlay: {
+    position: 'absolute', 
+    width: '100%', 
+    height: '100%', 
+    backgroundColor: 'rgba(0,0,0,0.8)', // Fondo oscuro sólido
   },
   modalView: {
+    width: width * 0.9,
+    // Quitamos altura fija, dejamos que se ajuste al contenido
+    maxHeight: height * 0.85,
     backgroundColor: COLORES.fondoBlanco,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    height: '85%', // Ocupa el 85% de la pantalla
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    borderRadius: 20,
+    padding: 25,
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.3, 
+    shadowRadius: 10, 
+    elevation: 10,
+    overflow: 'hidden', // Para recortes limpios
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  // --- ESTILO DE ÉXITO (Centrado y compacto) ---
+  successContainer: {
     alignItems: 'center',
-    marginBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEE',
-    paddingBottom: 10,
+    justifyContent: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
   },
-  modalTitle: {
-    fontSize: 20,
+  successText: {
+    fontSize: 24,
     fontWeight: 'bold',
-    color: COLORES.texto,
+    color: COLORES.principal,
+    textAlign: 'center',
+    marginBottom: 8,
   },
-  scrollContent: {
-    paddingBottom: 20,
-  },
-  inputGroup: {
-    marginBottom: 15,
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 15,
-    zIndex: 1, // Para que el dropdown se vea por encima
-  },
-  halfInput: {
-    width: '48%',
-  },
-  label: {
-    fontSize: 13,
-    color: COLORES.textoSecundario,
-    marginBottom: 6,
-    fontWeight: '600',
-  },
-  input: {
-    backgroundColor: COLORES.fondoGris,
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 15,
-    color: COLORES.texto,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-  },
-  // Estilos del Dropdown Personalizado
-  dropdownButton: {
-    backgroundColor: COLORES.fondoGris,
-    borderRadius: 8,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: COLORES.principal, // Borde verde como en la imagen cuando activo
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    height: 50,
-  },
-  dropdownText: {
-    fontSize: 14,
-    color: COLORES.texto,
-  },
-  dropdownList: {
-    position: 'absolute',
-    top: 55,
-    left: 0,
-    right: 0,
-    backgroundColor: 'white',
-    borderRadius: 8,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    zIndex: 1000,
-  },
-  dropdownItem: {
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  dropdownItemText: {
-    fontSize: 14,
-    color: COLORES.texto,
-  },
-  saveButton: {
-    backgroundColor: COLORES.principal,
-    borderRadius: 12,
-    padding: 15,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  saveButtonText: {
-    color: COLORES.textoSobrePrincipal,
-    fontWeight: 'bold',
+  successSubText: {
     fontSize: 16,
+    color: COLORES.textoSecundario,
+    textAlign: 'center',
   },
+  // --- Resto de estilos del formulario (Igual que antes) ---
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
+  },
+  modalTitle: { fontSize: 22, fontWeight: 'bold', color: COLORES.texto },
+  closeIcon: { padding: 5 },
+  scrollContent: { paddingBottom: 10 },
+  inputGroup: { marginBottom: 15 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
+  halfInput: { width: '48%' },
+  label: { fontSize: 13, color: COLORES.textoSecundario, marginBottom: 6, fontWeight: '600' },
+  input: {
+    backgroundColor: COLORES.fondoGris, borderRadius: 10, padding: 12, fontSize: 14, color: COLORES.texto,
+    borderWidth: 1, borderColor: '#E0E0E0',
+  },
+  dropdownButton: {
+    backgroundColor: COLORES.fondoGris, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#E0E0E0',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: 46,
+  },
+  dropdownText: { fontSize: 13, color: COLORES.texto, maxWidth: '80%' },
+  dropdownList: {
+    position: 'absolute', top: 50, left: 0, right: 0, backgroundColor: 'white', borderRadius: 8,
+    elevation: 5, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, zIndex: 1000,
+  },
+  dropdownItem: { padding: 10, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  dropdownItemText: { fontSize: 13, color: COLORES.texto },
+  footer: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 20, gap: 10 },
+  btnCancel: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12 },
+  textCancel: { color: COLORES.danger, fontWeight: 'bold', fontSize: 15 },
+  btnSave: {
+    backgroundColor: COLORES.principal, paddingVertical: 12, paddingHorizontal: 30, borderRadius: 12,
+    shadowColor: COLORES.principal, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3, elevation: 3,
+  },
+  textSave: { color: COLORES.textoSobrePrincipal, fontWeight: 'bold', fontSize: 15 },
 });

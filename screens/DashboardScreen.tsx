@@ -1,35 +1,48 @@
-// screens/DashboardScreen.tsx
 import React, { useState } from 'react';
-import { StyleSheet, View, SafeAreaView, Alert, StatusBar } from 'react-native';
+import { StyleSheet, View, SafeAreaView, StatusBar } from 'react-native';
 import { COLORES } from '../constants/colors';
 
-// Importamos los componentes divididos
+// Componentes
 import HomeTab from '../components/dashboard/HomeTab';
 import CitasTab from '../components/dashboard/CitasTab';
-import HistorialTab from '../components/dashboard/HistorialTab';
+import ClientesTab from '../components/dashboard/ClientesTab'; // Importamos el nuevo
 import PerfilTab from '../components/dashboard/PerfilTab';
 import BottomNavBar from '../components/ui/BottomNavBar';
+import AddClientModal from '../components/modals/AddClientModal';
 
-// Definimos el tipo para las pestañas
-type TabType = 'Home' | 'Citas' | 'Historial' | 'Perfil';
+// Actualizamos el tipo
+type TabType = 'Home' | 'Citas' | 'Clientes' | 'Perfil';
 
 export default function DashboardScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('Home');
+  
+  // Estado para controlar el Modal GLOBALMENTE
+  const [modalVisible, setModalVisible] = useState(false);
+  
+  // Estado "gatillo" para avisar a la lista de clientes que se actualice
+  const [clientesRefreshTrigger, setClientesRefreshTrigger] = useState(0);
 
-  // Función para el botón flotante (+)
-  const handleAddCita = () => {
-    Alert.alert('Nueva Cita', 'Aquí abrirías el modal para agendar una cita.');
+  const handleAddClick = () => {
+    setModalVisible(true);
   };
 
-  // Función que decide qué componente renderizar
+  const handleClientAdded = () => {
+    // Cambiamos este número para "avisar" a ClientesTab que recargue
+    setClientesRefreshTrigger(prev => prev + 1);
+    
+    // Opcional: Si quieres que al agregar un cliente te lleve a la lista automáticamente:
+    setActiveTab('Clientes'); 
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'Home':
         return <HomeTab />;
       case 'Citas':
         return <CitasTab />;
-      case 'Historial':
-        return <HistorialTab />;
+      case 'Clientes':
+        // Le pasamos el trigger para que sepa cuando recargar
+        return <ClientesTab refreshTrigger={clientesRefreshTrigger} />;
       case 'Perfil':
         return <PerfilTab />;
       default:
@@ -41,16 +54,21 @@ export default function DashboardScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORES.fondoGris} />
       
-      {/* 1. Contenido Principal (Cambiante) */}
       <View style={styles.mainContainer}>
         {renderContent()}
       </View>
 
-      {/* 2. Barra de Navegación Inferior Modularizada */}
       <BottomNavBar 
         activeTab={activeTab} 
         onTabChange={setActiveTab} 
-        onAddClick={handleAddCita}
+        onAddClick={handleAddClick}
+      />
+
+      {/* El Modal ahora vive aquí, disponible en TODAS las pestañas */}
+      <AddClientModal 
+        visible={modalVisible} 
+        onClose={() => setModalVisible(false)}
+        onClientAdded={handleClientAdded}
       />
     </SafeAreaView>
   );
@@ -63,6 +81,6 @@ const styles = StyleSheet.create({
   },
   mainContainer: {
     flex: 1,
-    marginBottom: 70, // Dejamos espacio para que la barra no tape el contenido al final
+    marginBottom: 70, 
   },
 });
