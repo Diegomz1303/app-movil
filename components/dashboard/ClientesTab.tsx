@@ -5,29 +5,24 @@ import {
   StyleSheet, 
   FlatList, 
   ActivityIndicator,
-  RefreshControl 
+  RefreshControl,
+  TouchableOpacity,
+  Alert
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { COLORES } from '../../constants/colors';
+// Importamos el Modal y el tipo Cliente
+import ClientDetailsModal, { Cliente } from '../modals/ClientDetailsModal';
 
-type Cliente = {
-  id: number;
-  nombres: string;
-  apellidos: string;
-  telefono: string;
-  tipo_documento: string;
-  numero_documento: string;
-};
-
-// --- ¡AQUÍ ES DONDE OCURRE LA MAGIA! ---
-// Debemos decirle al componente que va a recibir "refreshTrigger" que es un número.
 export default function ClientesTab({ refreshTrigger }: { refreshTrigger: number }) {
-// ---------------------------------------
-
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Estados para el Modal de Detalle
+  const [selectedClient, setSelectedClient] = useState<Cliente | null>(null);
+  const [detailsVisible, setDetailsVisible] = useState(false);
 
   const fetchClientes = async () => {
     if (!refreshing) setLoading(true);
@@ -43,7 +38,6 @@ export default function ClientesTab({ refreshTrigger }: { refreshTrigger: number
     setLoading(false);
   };
 
-  // Este useEffect "escucha" cambios en refreshTrigger para recargar la lista
   useEffect(() => {
     fetchClientes();
   }, [refreshTrigger]);
@@ -54,8 +48,33 @@ export default function ClientesTab({ refreshTrigger }: { refreshTrigger: number
     setRefreshing(false);
   }, []);
 
+  // --- ESTA ES LA FUNCIÓN QUE TE FALTABA ---
+  const deleteClient = async (id: number) => {
+    const { error } = await supabase
+      .from('clientes')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      Alert.alert("Error", "No se pudo eliminar al cliente: " + error.message);
+    } else {
+      // Recargamos la lista para que desaparezca el eliminado
+      fetchClientes();
+    }
+  };
+  // -----------------------------------------
+
+  const handlePressClient = (cliente: Cliente) => {
+    setSelectedClient(cliente);
+    setDetailsVisible(true);
+  };
+
   const renderItem = ({ item }: { item: Cliente }) => (
-    <View style={styles.card}>
+    <TouchableOpacity 
+      style={styles.card} 
+      activeOpacity={0.7} 
+      onPress={() => handlePressClient(item)}
+    >
       <View style={styles.cardIcon}>
         <MaterialCommunityIcons name="account" size={28} color={COLORES.principalDark} />
       </View>
@@ -71,7 +90,7 @@ export default function ClientesTab({ refreshTrigger }: { refreshTrigger: number
         ) : null}
       </View>
       <MaterialCommunityIcons name="chevron-right" size={24} color={COLORES.inactivo} />
-    </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -103,13 +122,21 @@ export default function ClientesTab({ refreshTrigger }: { refreshTrigger: number
           }
         />
       )}
+
+      {/* Modal de Detalle: AHORA SÍ PASAMOS LA FUNCIÓN onDelete */}
+      <ClientDetailsModal 
+        visible={detailsVisible} 
+        cliente={selectedClient} 
+        onClose={() => setDetailsVisible(false)} 
+        onDelete={deleteClient} 
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORES.fondoGris },
-  header: { paddingHorizontal: 20, paddingTop: 50, paddingBottom: 10 }, // Ajustado para bajar el título
+  header: { paddingHorizontal: 20, paddingTop: 50, paddingBottom: 10 },
   title: { fontSize: 26, fontWeight: 'bold', color: COLORES.texto },
   subtitle: { fontSize: 14, color: COLORES.textoSecundario },
   listContent: { padding: 20, paddingBottom: 100 },
