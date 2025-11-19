@@ -13,7 +13,8 @@ import {
   KeyboardAvoidingView,
   Animated,
   Dimensions,
-  Image // Importamos Image para previsualizar
+  Image,
+  TouchableWithoutFeedback
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
@@ -35,7 +36,12 @@ interface AddPetModalProps {
 }
 
 export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: AddPetModalProps) {
+  // Animación para el modal principal
   const scaleValue = useRef(new Animated.Value(0)).current;
+  
+  // Animación para el selector de fotos (Menú nuevo)
+  const optionsScaleValue = useRef(new Animated.Value(0)).current;
+
   const [loading, setLoading] = useState(false);
   
   // Estados del formulario
@@ -49,50 +55,63 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
   const [fechaNacimientoText, setFechaNacimientoText] = useState(''); 
   const [showDatePicker, setShowDatePicker] = useState(false); 
 
-  // Dropdown
+  // Dropdown y Selector de Imagen
   const [showSexDropdown, setShowSexDropdown] = useState(false);
+  const [showImageOptions, setShowImageOptions] = useState(false); // Nuevo estado para el menú de fotos
 
-  // --- ESTADO PARA LA FOTO ---
+  // Estado para la foto
   const [imageUri, setImageUri] = useState<string | null>(null);
 
-  // Animación de entrada
+  // 1. Animación de entrada del Modal Principal
   useEffect(() => {
     if (visible) {
       scaleValue.setValue(0);
       Animated.spring(scaleValue, {
         toValue: 1,
-        friction: 7,
-        tension: 40,
+        friction: 6,   // Menor fricción = más rebote
+        tension: 50,   // Tensión del resorte
         useNativeDriver: true,
       }).start();
     }
   }, [visible]);
 
-  // --- LÓGICA DE IMAGEN (Cámara y Galería) ---
-  const handleSelectImage = async () => {
-    Alert.alert(
-      "Foto de la Mascota",
-      "Elige una opción",
-      [
-        { text: "Cancelar", style: "cancel" },
-        { text: "Tomar Foto", onPress: () => pickImage('camera') },
-        { text: "Abrir Galería", onPress: () => pickImage('gallery') },
-      ]
-    );
+  // 2. Animación de entrada del Menú de Fotos (Cuando se activa)
+  useEffect(() => {
+    if (showImageOptions) {
+      optionsScaleValue.setValue(0);
+      Animated.spring(optionsScaleValue, {
+        toValue: 1,
+        friction: 5,
+        tension: 80,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [showImageOptions]);
+
+  // --- LÓGICA DE IMAGEN (Sin cambios funcionales, solo UI) ---
+  
+  const handleOpenImagePicker = () => {
+    setShowImageOptions(true); // En lugar de Alert, abrimos nuestro menú personalizado
+  };
+
+  const handleCloseImagePicker = () => {
+    setShowImageOptions(false);
   };
 
   const pickImage = async (mode: 'camera' | 'gallery') => {
+    // Cerramos el menú de opciones antes de proceder
+    handleCloseImagePicker();
+
     try {
       let result;
       const options: ImagePicker.ImagePickerOptions = {
-        mediaTypes: ['images'], // Solo imágenes (corregido)
+        mediaTypes: ['images'], // Actualizado para nuevas versiones de Expo
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 1, // Calidad inicial (la comprimiremos después)
+        quality: 1, 
       };
 
       if (mode === 'camera') {
-        // Pedir permiso de cámara
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== 'granted') {
           Alert.alert("Permiso denegado", "Necesitamos acceso a la cámara.");
@@ -100,7 +119,6 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
         }
         result = await ImagePicker.launchCameraAsync(options);
       } else {
-        // Pedir permiso de galería
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
           Alert.alert("Permiso denegado", "Necesitamos acceso a la galería.");
@@ -110,8 +128,7 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
       }
 
       if (!result.canceled) {
-        // --- AQUÍ OCURRE LA MAGIA DE LA COMPRESIÓN ---
-        // Redimensionamos a 800px de ancho y comprimimos al 50%
+        // Compresión
         const manipResult = await ImageManipulator.manipulateAsync(
           result.assets[0].uri,
           [{ resize: { width: 800 } }], 
@@ -124,7 +141,7 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
     }
   };
 
-  // Función para subir la imagen a Supabase Storage
+  // Subida a Supabase
   const uploadImageToSupabase = async (uri: string) => {
     try {
       const ext = uri.substring(uri.lastIndexOf('.') + 1);
@@ -138,12 +155,11 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
       } as any);
 
       const { data, error } = await supabase.storage
-        .from('mascotas') // Nombre del bucket que creamos en el SQL
+        .from('mascotas') 
         .upload(fileName, formData);
 
       if (error) throw error;
 
-      // Obtener la URL pública
       const { data: publicUrlData } = supabase.storage
         .from('mascotas')
         .getPublicUrl(fileName);
@@ -179,7 +195,6 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
     setLoading(true);
     let uploadedPhotoUrl = null;
 
-    // 1. Si hay imagen seleccionada, la subimos primero
     if (imageUri) {
         uploadedPhotoUrl = await uploadImageToSupabase(imageUri);
         if (!uploadedPhotoUrl) {
@@ -187,7 +202,6 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
         }
     }
 
-    // 2. Guardamos los datos en la tabla (incluyendo la URL de la foto)
     const { error } = await supabase.from('mascotas').insert({
       nombre,
       raza,
@@ -195,7 +209,7 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
       fecha_nacimiento: fechaNacimientoText,
       observaciones,
       cliente_id: clientId,
-      foto_url: uploadedPhotoUrl // Guardamos la URL
+      foto_url: uploadedPhotoUrl 
     });
 
     setLoading(false);
@@ -216,7 +230,7 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
     setFechaNacimientoText('');
     setDate(new Date());
     setObservaciones('');
-    setImageUri(null); // Limpiar foto
+    setImageUri(null);
     setShowSexDropdown(false);
     onClose();
   };
@@ -232,6 +246,7 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
         style={styles.centeredView}
       >
+        {/* Overlay para cerrar al tocar fuera */}
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose} />
 
         <Animated.View style={[styles.modalView, { transform: [{ scale: scaleValue }] }]}>
@@ -246,17 +261,16 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
             
-            {/* FOTO (Actualizado para mostrar la preview) */}
+            {/* FOTO con selector personalizado */}
             <View style={styles.uploadContainer}>
-                <TouchableOpacity onPress={handleSelectImage} style={styles.imageWrapper}>
+                <TouchableOpacity onPress={handleOpenImagePicker} style={styles.imageWrapper} activeOpacity={0.8}>
                     {imageUri ? (
                         <Image source={{ uri: imageUri }} style={styles.previewImage} />
                     ) : (
                         <View style={styles.uploadIconBg}>
-                            <MaterialCommunityIcons name="camera-plus-outline" size={30} color={COLORES.principal} />
+                            <MaterialCommunityIcons name="camera-plus-outline" size={32} color={COLORES.principal} />
                         </View>
                     )}
-                    {/* Icono pequeño de edición si ya hay foto */}
                     {imageUri && (
                         <View style={styles.editBadge}>
                             <MaterialCommunityIcons name="pencil" size={14} color="white" />
@@ -264,11 +278,11 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
                     )}
                 </TouchableOpacity>
                 <Text style={styles.uploadText}>
-                    {imageUri ? "Cambiar foto" : "Subir foto de perfil"}
+                    {imageUri ? "Cambiar foto" : "Añadir foto"}
                 </Text>
             </View>
 
-            {/* Nombre y Raza */}
+            {/* Formulario */}
             <View style={styles.row}>
                 <View style={styles.halfInput}>
                     <Text style={styles.label}>Nombre *</Text>
@@ -292,7 +306,6 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
                 </View>
             </View>
 
-            {/* Sexo y Fecha */}
             <View style={[styles.row, { zIndex: 10 }]}> 
                 {/* Dropdown Sexo */}
                 <View style={styles.halfInput}>
@@ -349,12 +362,11 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
                 </View>
             </View>
 
-            {/* Observaciones */}
             <View style={styles.inputGroup}>
                 <Text style={styles.label}>Observaciones</Text>
                 <TextInput
                     style={[styles.input, styles.textArea]}
-                    placeholder="Alergias, carácter, marcas..."
+                    placeholder="Alergias, carácter..."
                     placeholderTextColor="#CCC"
                     multiline={true}
                     numberOfLines={3}
@@ -364,7 +376,6 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
                 />
             </View>
 
-            {/* Botones */}
             <View style={styles.footer}>
                 <TouchableOpacity style={styles.btnCancel} onPress={onClose}>
                     <Text style={styles.textCancel}>Cancelar</Text>
@@ -374,13 +385,48 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
                     {loading ? (
                         <ActivityIndicator color={COLORES.textoSobrePrincipal} />
                     ) : (
-                        <Text style={styles.textSave}>Guardar Mascota</Text>
+                        <Text style={styles.textSave}>Guardar</Text>
                     )}
                 </TouchableOpacity>
             </View>
             
             <View style={{ height: 20 }} />
           </ScrollView>
+
+          {/* --- MENÚ OVERLAY DE SELECCIÓN DE FOTO (MODERNO) --- */}
+          {showImageOptions && (
+            <View style={styles.optionsOverlay}>
+              <TouchableWithoutFeedback onPress={handleCloseImagePicker}>
+                 <View style={styles.optionsBackdrop} />
+              </TouchableWithoutFeedback>
+              
+              <Animated.View style={[styles.optionsContainer, { transform: [{ scale: optionsScaleValue }] }]}>
+                <Text style={styles.optionsTitle}>Añadir Foto de Mascota</Text>
+                <Text style={styles.optionsSubtitle}>Elige una opción</Text>
+
+                {/* Opción Cámara */}
+                <TouchableOpacity style={[styles.optionCard, { backgroundColor: COLORES.principal }]} onPress={() => pickImage('camera')}>
+                   <View style={styles.optionIconCircle}>
+                      <MaterialCommunityIcons name="camera" size={24} color={COLORES.principal} />
+                   </View>
+                   <Text style={styles.optionText}>TOMAR FOTO</Text>
+                </TouchableOpacity>
+
+                {/* Opción Galería */}
+                <TouchableOpacity style={[styles.optionCard, { backgroundColor: COLORES.principalDark, marginTop: 12 }]} onPress={() => pickImage('gallery')}>
+                   <View style={styles.optionIconCircle}>
+                      <MaterialCommunityIcons name="image-multiple" size={24} color={COLORES.principalDark} />
+                   </View>
+                   <Text style={styles.optionText}>ELEGIR DE GALERÍA</Text>
+                </TouchableOpacity>
+
+                {/* Cancelar */}
+                <TouchableOpacity style={styles.optionCancel} onPress={handleCloseImagePicker}>
+                   <Text style={styles.optionCancelText}>Cancelar</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            </View>
+          )}
 
         </Animated.View>
       </KeyboardAvoidingView>
@@ -395,10 +441,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   overlay: {
-    position: 'absolute', 
-    width: '100%', 
-    height: '100%', 
-    backgroundColor: 'rgba(0,0,0,0.8)', 
+    position: 'absolute', width: '100%', height: '100%', 
+    backgroundColor: 'rgba(0,0,0,0.6)', 
   },
   modalView: {
     width: width * 0.9,
@@ -406,69 +450,101 @@ const styles = StyleSheet.create({
     backgroundColor: COLORES.fondoBlanco,
     borderRadius: 20,
     padding: 25,
-    shadowColor: '#000', 
-    shadowOffset: { width: 0, height: 4 }, 
-    shadowOpacity: 0.3, 
-    shadowRadius: 10, 
-    elevation: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 15,
     overflow: 'hidden'
   },
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
+    marginBottom: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#F5F5F5',
   },
   modalTitle: { fontSize: 22, fontWeight: 'bold', color: COLORES.texto },
   closeIcon: { padding: 5 },
   scrollContent: { paddingBottom: 10 },
   
-  // Estilos mejorados para la Foto
+  // --- Estilos FOTO ---
   uploadContainer: { alignItems: 'center', marginBottom: 20 },
-  imageWrapper: { position: 'relative', marginBottom: 8 },
+  imageWrapper: { 
+    position: 'relative', marginBottom: 8,
+    shadowColor: COLORES.principal, shadowOffset: {width:0, height:4}, shadowOpacity:0.2, shadowRadius:5, elevation:5
+  },
   uploadIconBg: { 
-    width: 80, height: 80, borderRadius: 40, backgroundColor: COLORES.fondoGris, 
+    width: 90, height: 90, borderRadius: 45, backgroundColor: '#FAFAFA', 
     justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1, borderColor: '#E0E0E0', borderStyle: 'dashed'
+    borderWidth: 2, borderColor: COLORES.principal, borderStyle: 'dashed'
   },
   previewImage: {
-    width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: COLORES.principal
+    width: 90, height: 90, borderRadius: 45, borderWidth: 2, borderColor: COLORES.principal
   },
   editBadge: {
     position: 'absolute', bottom: 0, right: 0, backgroundColor: COLORES.principal,
-    width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center',
+    width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center',
     borderWidth: 2, borderColor: 'white'
   },
-  uploadText: { color: COLORES.principal, fontWeight: '600', fontSize: 14 },
+  uploadText: { color: COLORES.principal, fontWeight: '600', fontSize: 14, marginTop: 5 },
 
+  // --- Inputs ---
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
   halfInput: { width: '48%' },
   inputGroup: { marginBottom: 15 },
   label: { fontSize: 13, color: COLORES.textoSecundario, marginBottom: 6, fontWeight: '600' },
   input: {
-    backgroundColor: COLORES.fondoGris, borderRadius: 10, padding: 12, fontSize: 14, color: COLORES.texto,
-    borderWidth: 1, borderColor: '#E0E0E0',
+    backgroundColor: COLORES.fondoGris, borderRadius: 12, padding: 12, fontSize: 14, color: COLORES.texto,
+    borderWidth: 1, borderColor: '#EEE',
   },
   textArea: { height: 80 },
   dropdownButton: {
-    backgroundColor: COLORES.fondoGris, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#E0E0E0',
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: 46,
+    backgroundColor: COLORES.fondoGris, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#EEE',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: 48,
   },
   dropdownList: {
-    position: 'absolute', top: 50, left: 0, right: 0, backgroundColor: 'white', borderRadius: 8,
+    position: 'absolute', top: 52, left: 0, right: 0, backgroundColor: 'white', borderRadius: 8,
     elevation: 5, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, zIndex: 1000,
   },
-  dropdownItem: { padding: 10, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  dropdownItemText: { fontSize: 13, color: COLORES.texto },
+  dropdownItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+  dropdownItemText: { fontSize: 14, color: COLORES.texto },
   dateContainer: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: COLORES.fondoGris, borderRadius: 10, paddingHorizontal: 12, 
-    borderWidth: 1, borderColor: '#E0E0E0', height: 46
+    backgroundColor: COLORES.fondoGris, borderRadius: 12, paddingHorizontal: 12, 
+    borderWidth: 1, borderColor: '#EEE', height: 48
   },
-  footer: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 20, gap: 10 },
+  footer: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 25, gap: 10 },
   btnCancel: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12 },
-  textCancel: { color: COLORES.danger, fontWeight: 'bold', fontSize: 15 },
+  textCancel: { color: COLORES.textoSecundario, fontWeight: 'bold', fontSize: 15 },
   btnSave: {
     backgroundColor: COLORES.principal, paddingVertical: 12, paddingHorizontal: 30, borderRadius: 12,
-    shadowColor: COLORES.principal, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3, elevation: 3,
+    shadowColor: COLORES.principal, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
   },
   textSave: { color: COLORES.textoSobrePrincipal, fontWeight: 'bold', fontSize: 15 },
+
+  // --- NUEVOS ESTILOS: Menú de Opciones de Imagen (Overlay) ---
+  optionsOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    justifyContent: 'center', alignItems: 'center',
+    zIndex: 20, elevation: 20,
+  },
+  optionsBackdrop: {
+    position: 'absolute', width: '100%', height: '100%',
+    backgroundColor: 'rgba(255,255,255,0.8)', // Fondo blanco semitransparente para desenfoque
+  },
+  optionsContainer: {
+    width: '85%', backgroundColor: 'white', borderRadius: 25, padding: 25,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.2, shadowRadius: 20, elevation: 10,
+    alignItems: 'center'
+  },
+  optionsTitle: { fontSize: 20, fontWeight: 'bold', color: COLORES.texto, marginBottom: 5 },
+  optionsSubtitle: { fontSize: 14, color: COLORES.textoSecundario, marginBottom: 20 },
+  
+  optionCard: {
+    width: '100%', paddingVertical: 15, paddingHorizontal: 20, borderRadius: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 5
+  },
+  optionIconCircle: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.9)',
+    justifyContent: 'center', alignItems: 'center', marginRight: 15
+  },
+  optionText: { color: 'white', fontSize: 16, fontWeight: 'bold', letterSpacing: 0.5 },
+  
+  optionCancel: { marginTop: 20, padding: 10 },
+  optionCancelText: { color: COLORES.textoSecundario, fontWeight: '600', fontSize: 15 }
 });

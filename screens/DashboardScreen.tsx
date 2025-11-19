@@ -14,45 +14,53 @@ import BottomNavBar from '../components/ui/BottomNavBar';
 // Modales
 import AddClientModal from '../components/modals/AddClientModal';
 import PetsListModal from '../components/modals/PetsListModal';
+import AddAppointmentModal from '../components/modals/AddAppointmentModal';
 
-// Tipo de pestañas
 type TabType = 'Home' | 'Citas' | 'Clientes' | 'Perfil';
 
 export default function DashboardScreen() {
-  // Estado de la pestaña activa
   const [activeTab, setActiveTab] = useState<TabType>('Home');
   
-  // Estados para controlar los Modales
-  const [modalVisible, setModalVisible] = useState(false);        // Modal Agregar Cliente
-  const [petsModalVisible, setPetsModalVisible] = useState(false); // Modal Buscar Mascotas
+  // Modales
+  const [clientModalVisible, setClientModalVisible] = useState(false);
+  const [appointmentModalVisible, setAppointmentModalVisible] = useState(false);
+  const [petsModalVisible, setPetsModalVisible] = useState(false);
   
-  // Estado "gatillo" para actualizar la lista de clientes
+  // Triggers de Refresco (Gatillos)
   const [clientesRefreshTrigger, setClientesRefreshTrigger] = useState(0);
+  const [citasRefreshTrigger, setCitasRefreshTrigger] = useState(0); // <--- NUEVO
 
-  // Función para abrir modal de cliente (Click corto en +)
-  const handleAddClick = () => {
-    setModalVisible(true);
+  // Lógica del Botón Central
+  const handleMainButtonClick = () => {
+    if (activeTab === 'Clientes') {
+      setClientModalVisible(true);
+    } else if (activeTab === 'Citas') {
+      setAppointmentModalVisible(true);
+    } else {
+      console.log("Botón inactivo en esta pantalla");
+    }
   };
 
-  // Función cuando se agrega un cliente exitosamente
   const handleClientAdded = () => {
-    setClientesRefreshTrigger(prev => prev + 1); // Recarga la lista
-    setActiveTab('Clientes'); // Cambia a la pestaña de clientes
+    setClientesRefreshTrigger(prev => prev + 1); 
+    setActiveTab('Clientes'); 
   };
 
-  // Renderizado condicional de las pestañas
+  // <--- NUEVA FUNCIÓN: Refrescar citas al agregar
+  const handleAppointmentAdded = () => {
+    setCitasRefreshTrigger(prev => prev + 1);
+    setActiveTab('Citas');
+  };
+
   const renderContent = () => {
     switch (activeTab) {
-      case 'Home':
-        return <HomeTab />;
-      case 'Citas':
-        return <CitasTab />;
-      case 'Clientes':
-        return <ClientesTab refreshTrigger={clientesRefreshTrigger} />;
-      case 'Perfil':
-        return <PerfilTab />;
-      default:
-        return <HomeTab />;
+      case 'Home': return <HomeTab />;
+      case 'Citas': 
+        // <--- Pasamos el trigger aquí
+        return <CitasTab refreshTrigger={citasRefreshTrigger} />;
+      case 'Clientes': return <ClientesTab refreshTrigger={clientesRefreshTrigger} />;
+      case 'Perfil': return <PerfilTab />;
+      default: return <HomeTab />;
     }
   };
 
@@ -64,22 +72,25 @@ export default function DashboardScreen() {
         {renderContent()}
       </View>
 
-      {/* Barra de Navegación con Menú Desplegable */}
       <BottomNavBar 
         activeTab={activeTab} 
         onTabChange={setActiveTab} 
-        onAddClick={handleAddClick}
-        onPetsClick={() => setPetsModalVisible(true)} // Abre el modal de mascotas
+        onAddClick={handleMainButtonClick} 
+        onPetsClick={() => setPetsModalVisible(true)} 
       />
 
-      {/* Modal: Agregar Cliente */}
       <AddClientModal 
-        visible={modalVisible} 
-        onClose={() => setModalVisible(false)}
+        visible={clientModalVisible} 
+        onClose={() => setClientModalVisible(false)}
         onClientAdded={handleClientAdded}
       />
 
-      {/* Modal: Buscador de Mascotas (Directorio) */}
+      <AddAppointmentModal
+        visible={appointmentModalVisible}
+        onClose={() => setAppointmentModalVisible(false)}
+        onAppointmentAdded={handleAppointmentAdded} // <--- Conectamos la función
+      />
+
       <PetsListModal
         visible={petsModalVisible}
         onClose={() => setPetsModalVisible(false)}
@@ -95,6 +106,6 @@ const styles = StyleSheet.create({
   },
   mainContainer: {
     flex: 1,
-    marginBottom: 70, // Espacio para la BottomBar
+    marginBottom: 70, 
   },
 });
