@@ -20,7 +20,9 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { COLORES } from '../../constants/colors';
 
-// Habilitar animaciones en Android
+// 1. Importamos el hook del tema
+import { useTheme } from '../../context/ThemeContext';
+
 if (Platform.OS === 'android') {
   if (UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -37,6 +39,9 @@ export default function AddClientModal({ visible, onClose, onClientAdded }: AddC
   
   const scaleValue = useRef(new Animated.Value(0)).current;
   const [showSuccess, setShowSuccess] = useState(false);
+  
+  // 2. Usamos el tema
+  const { theme, isDark } = useTheme();
 
   useEffect(() => {
     if (visible) {
@@ -98,11 +103,9 @@ export default function AddClientModal({ visible, onClose, onClientAdded }: AddC
     if (error) {
       Alert.alert('Error al guardar', error.message);
     } else {
-      // Animación suave de cambio de tamaño
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setShowSuccess(true);
       
-      // Cierra automáticamente después de 2 segundos
       setTimeout(() => {
         limpiarFormulario();
         onClientAdded();
@@ -124,20 +127,30 @@ export default function AddClientModal({ visible, onClose, onClientAdded }: AddC
     setShowSuccess(false);
   };
 
-  // --- AQUÍ ESTÁ EL CAMBIO CLAVE ---
+  // Estilos dinámicos para inputs
+  const inputStyle = [
+    styles.input, 
+    { 
+      backgroundColor: theme.inputBackground, 
+      borderColor: theme.border,
+      color: theme.text 
+    }
+  ];
+
+  const placeholderColor = theme.textSecondary;
+
   const renderContent = () => {
     if (showSuccess) {
       return (
         <View style={styles.successContainer}>
-          {/* Usamos un Icono Nativo Gigante en lugar de Lottie para asegurar que se vea */}
           <MaterialCommunityIcons 
             name="check-circle" 
             size={100} 
-            color={COLORES.principal} 
+            color={theme.primary} 
             style={{ marginBottom: 20 }}
           />
-          <Text style={styles.successText}>¡Cliente Registrado!</Text>
-          <Text style={styles.successSubText}>Se ha guardado correctamente.</Text>
+          <Text style={[styles.successText, { color: theme.text }]}>¡Cliente Registrado!</Text>
+          <Text style={[styles.successSubText, { color: theme.textSecondary }]}>Se ha guardado correctamente.</Text>
         </View>
       );
     }
@@ -145,76 +158,87 @@ export default function AddClientModal({ visible, onClose, onClientAdded }: AddC
     return (
       <>
         <View style={styles.header}>
-          <Text style={styles.modalTitle}>Registrar Cliente</Text>
+          <Text style={[styles.modalTitle, { color: theme.text }]}>Registrar Cliente</Text>
           <TouchableOpacity onPress={onClose} style={styles.closeIcon}>
-            <MaterialCommunityIcons name="close" size={24} color={COLORES.textoSecundario} />
+            <MaterialCommunityIcons name="close" size={24} color={theme.textSecondary} />
           </TouchableOpacity>
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
           <View style={styles.row}>
             <View style={styles.halfInput}>
-              <Text style={styles.label}>Nombres *</Text>
-              <TextInput style={styles.input} value={nombres} onChangeText={setNombres} />
+              <Text style={[styles.label, { color: theme.textSecondary }]}>Nombres *</Text>
+              <TextInput style={inputStyle} value={nombres} onChangeText={setNombres} placeholderTextColor={placeholderColor} />
             </View>
             <View style={styles.halfInput}>
-              <Text style={styles.label}>Apellidos *</Text>
-              <TextInput style={styles.input} value={apellidos} onChangeText={setApellidos} />
+              <Text style={[styles.label, { color: theme.textSecondary }]}>Apellidos *</Text>
+              <TextInput style={inputStyle} value={apellidos} onChangeText={setApellidos} placeholderTextColor={placeholderColor} />
             </View>
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Correo Electrónico (Opcional)</Text>
-            <TextInput style={styles.input} value={correo} onChangeText={setCorreo} keyboardType="email-address" autoCapitalize="none" />
+            <Text style={[styles.label, { color: theme.textSecondary }]}>Correo Electrónico (Opcional)</Text>
+            <TextInput style={inputStyle} value={correo} onChangeText={setCorreo} keyboardType="email-address" autoCapitalize="none" placeholderTextColor={placeholderColor} />
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Teléfono *</Text>
-            <TextInput style={styles.input} value={telefono} onChangeText={setTelefono} keyboardType="phone-pad" placeholder="987654321" placeholderTextColor="#CCC" />
+            <Text style={[styles.label, { color: theme.textSecondary }]}>Teléfono *</Text>
+            <TextInput style={inputStyle} value={telefono} onChangeText={setTelefono} keyboardType="phone-pad" placeholder="987654321" placeholderTextColor={placeholderColor} />
           </View>
 
           <View style={[styles.row, {zIndex: 10}]}> 
             <View style={styles.halfInput}>
-              <Text style={styles.label}>Tipo de Documento</Text>
-              <TouchableOpacity style={styles.dropdownButton} onPress={() => setShowDropdown(!showDropdown)}>
-                <Text style={styles.dropdownText} numberOfLines={1}>{tipoDocumento}</Text>
-                <MaterialCommunityIcons name="chevron-down" size={20} color={COLORES.texto} />
+              <Text style={[styles.label, { color: theme.textSecondary }]}>Tipo de Documento</Text>
+              <TouchableOpacity 
+                style={[styles.dropdownButton, { backgroundColor: theme.inputBackground, borderColor: theme.border }]} 
+                onPress={() => setShowDropdown(!showDropdown)}
+              >
+                <Text style={[styles.dropdownText, { color: theme.text }]} numberOfLines={1}>{tipoDocumento}</Text>
+                <MaterialCommunityIcons name="chevron-down" size={20} color={theme.text} />
               </TouchableOpacity>
+              
               {showDropdown && (
-                <View style={styles.dropdownList}>
+                <View style={[styles.dropdownList, { backgroundColor: theme.card, borderColor: theme.border }]}>
                   {documentos.map((doc) => (
-                    <TouchableOpacity key={doc} style={styles.dropdownItem} onPress={() => { setTipoDocumento(doc); setShowDropdown(false); }}>
-                      <Text style={styles.dropdownItemText}>{doc}</Text>
+                    <TouchableOpacity 
+                        key={doc} 
+                        style={[styles.dropdownItem, { borderBottomColor: theme.border }]} 
+                        onPress={() => { setTipoDocumento(doc); setShowDropdown(false); }}
+                    >
+                      <Text style={[styles.dropdownItemText, { color: theme.text }]}>{doc}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
               )}
             </View>
             <View style={styles.halfInput}>
-              <Text style={styles.label}>Número</Text>
-              <TextInput style={styles.input} value={numeroDocumento} onChangeText={setNumeroDocumento} keyboardType="numeric" />
+              <Text style={[styles.label, { color: theme.textSecondary }]}>Número</Text>
+              <TextInput style={inputStyle} value={numeroDocumento} onChangeText={setNumeroDocumento} keyboardType="numeric" placeholderTextColor={placeholderColor} />
             </View>
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Distrito *</Text>
-            <TextInput style={styles.input} value={distrito} onChangeText={setDistrito} placeholder="Ica" placeholderTextColor="#CCC"/>
+            <Text style={[styles.label, { color: theme.textSecondary }]}>Distrito *</Text>
+            <TextInput style={inputStyle} value={distrito} onChangeText={setDistrito} placeholder="Ica" placeholderTextColor={placeholderColor}/>
           </View>
 
           <View style={styles.row}>
             <View style={styles.halfInput}>
-              <Text style={styles.label}>Contacto Emergencia</Text>
-              <TextInput style={styles.input} value={contactoEmergencia} onChangeText={setContactoEmergencia} />
+              <Text style={[styles.label, { color: theme.textSecondary }]}>Contacto Emergencia</Text>
+              <TextInput style={inputStyle} value={contactoEmergencia} onChangeText={setContactoEmergencia} placeholderTextColor={placeholderColor} />
             </View>
             <View style={styles.halfInput}>
-              <Text style={styles.label}>Teléfono Emergencia</Text>
-              <TextInput style={styles.input} value={telefonoEmergencia} onChangeText={setTelefonoEmergencia} keyboardType="phone-pad" />
+              <Text style={[styles.label, { color: theme.textSecondary }]}>Teléfono Emergencia</Text>
+              <TextInput style={inputStyle} value={telefonoEmergencia} onChangeText={setTelefonoEmergencia} keyboardType="phone-pad" placeholderTextColor={placeholderColor} />
             </View>
           </View>
 
           <View style={styles.footer}>
-            <TouchableOpacity style={styles.btnCancel} onPress={onClose}>
-                <Text style={styles.textCancel}>Cancelar</Text>
+            <TouchableOpacity 
+                style={[styles.btnCancel, { backgroundColor: theme.inputBackground }]} 
+                onPress={onClose}
+            >
+                <Text style={[styles.textCancel, { color: theme.danger }]}>Cancelar</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.btnSave} onPress={handleSave} disabled={loading}>
@@ -235,7 +259,9 @@ export default function AddClientModal({ visible, onClose, onClientAdded }: AddC
     <Modal animationType="fade" transparent={true} visible={visible} onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.centeredView}>
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose} />
-        <Animated.View style={[styles.modalView, { transform: [{ scale: scaleValue }] }]}>
+        
+        {/* Fondo del Modal Dinámico */}
+        <Animated.View style={[styles.modalView, { transform: [{ scale: scaleValue }], backgroundColor: theme.card }]}>
           {renderContent()}
         </Animated.View>
       </KeyboardAvoidingView>
@@ -255,13 +281,11 @@ const styles = StyleSheet.create({
     position: 'absolute', 
     width: '100%', 
     height: '100%', 
-    backgroundColor: 'rgba(0,0,0,0.8)', // Fondo oscuro sólido
+    backgroundColor: 'rgba(0,0,0,0.6)',
   },
   modalView: {
     width: width * 0.9,
-    // Quitamos altura fija, dejamos que se ajuste al contenido
     maxHeight: height * 0.85,
-    backgroundColor: COLORES.fondoBlanco,
     borderRadius: 20,
     padding: 25,
     shadowColor: '#000', 
@@ -269,9 +293,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3, 
     shadowRadius: 10, 
     elevation: 10,
-    overflow: 'hidden', // Para recortes limpios
+    overflow: 'hidden',
   },
-  // --- ESTILO DE ÉXITO (Centrado y compacto) ---
   successContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -281,45 +304,44 @@ const styles = StyleSheet.create({
   successText: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: COLORES.principal,
     textAlign: 'center',
     marginBottom: 8,
   },
   successSubText: {
     fontSize: 16,
-    color: COLORES.textoSecundario,
     textAlign: 'center',
   },
-  // --- Resto de estilos del formulario (Igual que antes) ---
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
+    marginBottom: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: 'transparent', // Quitamos el borde fijo, o lo hacemos dinámico si prefieres
   },
-  modalTitle: { fontSize: 22, fontWeight: 'bold', color: COLORES.texto },
+  modalTitle: { fontSize: 22, fontWeight: 'bold' },
   closeIcon: { padding: 5 },
   scrollContent: { paddingBottom: 10 },
   inputGroup: { marginBottom: 15 },
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
   halfInput: { width: '48%' },
-  label: { fontSize: 13, color: COLORES.textoSecundario, marginBottom: 6, fontWeight: '600' },
+  label: { fontSize: 13, marginBottom: 6, fontWeight: '600' },
+  
   input: {
-    backgroundColor: COLORES.fondoGris, borderRadius: 10, padding: 12, fontSize: 14, color: COLORES.texto,
-    borderWidth: 1, borderColor: '#E0E0E0',
+    borderRadius: 10, padding: 12, fontSize: 14,
+    borderWidth: 1,
   },
   dropdownButton: {
-    backgroundColor: COLORES.fondoGris, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#E0E0E0',
+    borderRadius: 10, padding: 10, borderWidth: 1,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: 46,
   },
-  dropdownText: { fontSize: 13, color: COLORES.texto, maxWidth: '80%' },
+  dropdownText: { fontSize: 13, maxWidth: '80%' },
   dropdownList: {
-    position: 'absolute', top: 50, left: 0, right: 0, backgroundColor: 'white', borderRadius: 8,
+    position: 'absolute', top: 50, left: 0, right: 0, borderRadius: 8, borderWidth: 1,
     elevation: 5, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, zIndex: 1000,
   },
-  dropdownItem: { padding: 10, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  dropdownItemText: { fontSize: 13, color: COLORES.texto },
+  dropdownItem: { padding: 10, borderBottomWidth: 1 },
+  dropdownItemText: { fontSize: 13 },
+  
   footer: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 20, gap: 10 },
   btnCancel: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12 },
-  textCancel: { color: COLORES.danger, fontWeight: 'bold', fontSize: 15 },
+  textCancel: { fontWeight: 'bold', fontSize: 15 },
   btnSave: {
     backgroundColor: COLORES.principal, paddingVertical: 12, paddingHorizontal: 30, borderRadius: 12,
     shadowColor: COLORES.principal, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3, elevation: 3,

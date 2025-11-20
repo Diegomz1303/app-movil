@@ -13,24 +13,22 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { COLORES } from '../../constants/colors';
 
-// Contexto
+// Contextos
 import { useData } from '../../context/DataContext';
+import { useTheme } from '../../context/ThemeContext'; // <--- 1. Importar ThemeContext
 
 // Modales
 import CompleteAppointmentModal from '../modals/CompleteAppointmentModal'; 
 import AppointmentDetailsModal from '../modals/AppointmentDetailsModal';
 
-// --- INTERFAZ EXACTA DE LA RESPUESTA ---
-// Definimos la estructura incluyendo las relaciones (joins)
+// Tipo de dato
 export type Cita = {
   id: number;
   fecha: string;
   hora: string;
   servicio: string;
-  estado: string; // 'pendiente' | 'confirmada' | 'completada'
+  estado: string;
   notas?: string;
-  
-  // Campos de completado (pueden ser null)
   precio?: number | null;
   peso?: number | null;
   metodo_pago?: string | null;
@@ -39,16 +37,8 @@ export type Cita = {
   foto_llegada?: string | null;
   foto_salida?: string | null;
   foto_boleta?: string | null;
-
-  // Relaciones (Supabase las devuelve como objetos si es relación 1:1 o N:1)
-  clientes: { 
-    nombres: string; 
-    apellidos: string; 
-  } | null; // Puede ser null si se borró el cliente (depende de tu FK)
-  
-  mascotas: { 
-    nombre: string; 
-  } | null;
+  clientes: { nombres: string; apellidos: string; } | null;
+  mascotas: { nombre: string; } | null;
 };
 
 export default function CitasTab() {
@@ -56,16 +46,13 @@ export default function CitasTab() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Consumimos contexto
   const { appointmentsTrigger, refreshAppointments } = useData();
+  const { theme } = useTheme(); // <--- 2. Usar el tema
 
-  // Estados Modales
   const [completeModalVisible, setCompleteModalVisible] = useState(false);
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
-  
   const [selectedCita, setSelectedCita] = useState<Cita | null>(null);
 
-  // --- CARGAR CITAS CON TIPADO ---
   const fetchCitas = async () => {
     if (!refreshing) setLoading(true);
 
@@ -79,13 +66,11 @@ export default function CitasTab() {
         `)
         .order('fecha', { ascending: true })
         .order('hora', { ascending: true })
-        .returns<Cita[]>(); // <--- ¡MAGIA AQUÍ! Forzamos el tipo de retorno
+        .returns<Cita[]>();
 
       if (error) {
         console.error("Error cargando citas:", error.message);
-        Alert.alert("Error", "No se pudieron cargar las citas.");
       } else if (data) {
-        // Ahora 'data' es estrictamente de tipo Cita[], no 'any'
         setCitas(data);
       }
     } catch (err) {
@@ -95,7 +80,6 @@ export default function CitasTab() {
     }
   };
 
-  // Efecto que recarga cuando cambia el trigger global
   useEffect(() => { fetchCitas(); }, [appointmentsTrigger]);
 
   const onRefresh = useCallback(async () => {
@@ -104,18 +88,13 @@ export default function CitasTab() {
     setRefreshing(false);
   }, []);
 
-  // --- MANEJADORES ---
-
   const handleCancel = (id: number) => {
     Alert.alert("Cancelar Cita", "¿Estás seguro de eliminar esta cita?", [
         { text: "No", style: "cancel" },
         { text: "Sí, Eliminar", style: "destructive", onPress: async () => {
             const { error } = await supabase.from('citas').delete().eq('id', id);
-            if (error) {
-              Alert.alert("Error", error.message);
-            } else {
-              refreshAppointments(); // Usamos el contexto para recargar
-            }
+            if (error) Alert.alert("Error", error.message);
+            else refreshAppointments();
         }}
     ]);
   };
@@ -135,42 +114,42 @@ export default function CitasTab() {
   };
 
   const handleCompletionSuccess = () => {
-    refreshAppointments(); // Usamos el contexto para recargar
+    refreshAppointments();
   };
 
-  // --- RENDER ITEM ---
   const renderItem = ({ item }: { item: Cita }) => {
     const isCompleted = item.estado === 'completada';
 
     return (
       <TouchableOpacity 
-        style={styles.card} 
+        // 3. Fondo de tarjeta dinámico
+        style={[styles.card, { backgroundColor: theme.card }]} 
         activeOpacity={isCompleted ? 0.7 : 1}
         onPress={() => isCompleted && handleOpenDetailsModal(item)}
       >
         
         <View style={styles.cardMain}>
             <View style={styles.dateContainer}>
-                {/* Manejo seguro de fecha */}
-                <Text style={styles.dateText}>
+                {/* Textos con color del tema */}
+                <Text style={[styles.dateText, { color: theme.textSecondary }]}>
                   {item.fecha ? item.fecha.split('-').reverse().slice(0, 2).join('/') : '--/--'}
                 </Text> 
-                <Text style={[styles.timeText, isCompleted && { color: COLORES.principal }]}>
+                <Text style={[styles.timeText, { color: isCompleted ? theme.primary : theme.text }]}>
                     {item.hora}
                 </Text>
             </View>
 
-            <View style={styles.divider} />
+            {/* Divisor dinámico */}
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
             <View style={styles.infoContainer}>
                 <View style={styles.row}>
-                    <MaterialCommunityIcons name="paw" size={14} color={isCompleted ? COLORES.principal : '#FFB74D'} style={{ marginRight: 4 }} />
-                    {/* Uso de Optional Chaining (?.) por seguridad */}
-                    <Text style={styles.petName}>{item.mascotas?.nombre || 'Sin nombre'}</Text>
+                    <MaterialCommunityIcons name="paw" size={14} color={isCompleted ? theme.primary : '#FFB74D'} style={{ marginRight: 4 }} />
+                    <Text style={[styles.petName, { color: theme.text }]}>{item.mascotas?.nombre || 'Sin nombre'}</Text>
                 </View>
-                <Text style={styles.serviceText}>{item.servicio}</Text>
-                <Text style={styles.clientName}>
-                    <MaterialCommunityIcons name="account" size={12} color={COLORES.textoSecundario} /> 
+                <Text style={[styles.serviceText, { color: theme.textSecondary }]}>{item.servicio}</Text>
+                <Text style={[styles.clientName, { color: theme.textSecondary }]}>
+                    <MaterialCommunityIcons name="account" size={12} /> 
                     {" "}{item.clientes ? `${item.clientes.nombres} ${item.clientes.apellidos}` : 'Cliente desconocido'}
                 </Text>
             </View>
@@ -179,36 +158,37 @@ export default function CitasTab() {
                 <MaterialCommunityIcons 
                     name={isCompleted ? "check-circle" : "clock-outline"} 
                     size={28} 
-                    color={isCompleted ? COLORES.principal : "#DDD"} 
+                    color={isCompleted ? theme.primary : theme.border} 
                 />
             </View>
         </View>
 
-        <View style={styles.horizontalLine} />
+        <View style={[styles.horizontalLine, { backgroundColor: theme.border }]} />
 
-        <View style={styles.actionsContainer}>
+        {/* Fondo de acciones dinámico */}
+        <View style={[styles.actionsContainer, { backgroundColor: theme.inputBackground }]}>
             
             {isCompleted ? (
                 <View style={styles.completedState}>
-                    <MaterialCommunityIcons name="check-all" size={20} color={COLORES.principal} style={{ marginRight: 8 }} />
-                    <Text style={styles.completedText}>Cita Finalizada</Text>
-                    <Text style={styles.tapToViewText}>(Toca para ver detalles)</Text>
+                    <MaterialCommunityIcons name="check-all" size={20} color={theme.primary} style={{ marginRight: 8 }} />
+                    <Text style={[styles.completedText, { color: theme.primary }]}>Cita Finalizada</Text>
+                    <Text style={[styles.tapToViewText, { color: theme.textSecondary }]}>(Toca para ver detalles)</Text>
                 </View>
             ) : (
                 <>
                     <TouchableOpacity style={styles.actionButton} onPress={() => handleEdit(item)}>
-                        <MaterialCommunityIcons name="pencil-outline" size={18} color={COLORES.textoSecundario} />
-                        <Text style={styles.actionText}>Editar</Text>
+                        <MaterialCommunityIcons name="pencil-outline" size={18} color={theme.textSecondary} />
+                        <Text style={[styles.actionText, { color: theme.textSecondary }]}>Editar</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.actionButton} onPress={() => handleOpenCompleteModal(item)}>
-                        <MaterialCommunityIcons name="check" size={18} color={COLORES.principal} />
-                        <Text style={[styles.actionText, { color: COLORES.principal }]}>Completar</Text>
+                        <MaterialCommunityIcons name="check" size={18} color={theme.primary} />
+                        <Text style={[styles.actionText, { color: theme.primary }]}>Completar</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.actionButton} onPress={() => handleCancel(item.id)}>
-                        <MaterialCommunityIcons name="trash-can-outline" size={18} color={COLORES.danger} />
-                        <Text style={[styles.actionText, { color: COLORES.danger }]}>Cancelar</Text>
+                        <MaterialCommunityIcons name="trash-can-outline" size={18} color={theme.danger} />
+                        <Text style={[styles.actionText, { color: theme.danger }]}>Cancelar</Text>
                     </TouchableOpacity>
                 </>
             )}
@@ -219,14 +199,15 @@ export default function CitasTab() {
   };
 
   return (
-    <View style={styles.container}>
+    // 4. Fondo transparente para ver el patrón
+    <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       <View style={styles.header}>
-        <Text style={styles.title}>Mis Citas</Text>
-        <Text style={styles.subtitle}>Próximas atenciones programadas</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Mis Citas</Text>
+        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Próximas atenciones programadas</Text>
       </View>
 
       {loading && !refreshing ? (
-        <ActivityIndicator size="large" color={COLORES.principal} style={{ marginTop: 50 }} />
+        <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 50 }} />
       ) : (
         <FlatList
           data={citas}
@@ -234,13 +215,18 @@ export default function CitasTab() {
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORES.principal]} />
+            <RefreshControl 
+                refreshing={refreshing} 
+                onRefresh={onRefresh} 
+                colors={[theme.primary]} 
+                tintColor={theme.primary}
+            />
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <MaterialCommunityIcons name="calendar-blank" size={60} color={COLORES.inactivo} />
-              <Text style={styles.emptyText}>No hay citas pendientes.</Text>
-              <Text style={styles.emptySubText}>Agenda una nueva con el botón (+).</Text>
+              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No hay citas pendientes.</Text>
+              <Text style={[styles.emptySubText, { color: theme.textSecondary }]}>Agenda una nueva con el botón (+).</Text>
             </View>
           }
         />
@@ -264,38 +250,38 @@ export default function CitasTab() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORES.fondoGris },
+  container: { flex: 1 }, // Sin color de fondo fijo
   header: { paddingHorizontal: 20, paddingTop: 50, paddingBottom: 10 },
-  title: { fontSize: 28, fontWeight: 'bold', color: COLORES.texto },
-  subtitle: { fontSize: 14, color: COLORES.textoSecundario },
+  title: { fontSize: 28, fontWeight: 'bold' },
+  subtitle: { fontSize: 14 },
   listContent: { padding: 20, paddingBottom: 100 },
   
   card: {
-    backgroundColor: COLORES.fondoBlanco, borderRadius: 16, marginBottom: 15,
+    borderRadius: 16, marginBottom: 15,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2, overflow: 'hidden' 
   },
   cardMain: { flexDirection: 'row', alignItems: 'center', padding: 15 },
   dateContainer: { alignItems: 'center', justifyContent: 'center', width: 60 },
-  dateText: { fontSize: 13, fontWeight: 'bold', color: COLORES.textoSecundario },
-  timeText: { fontSize: 16, fontWeight: 'bold', color: '#555', marginTop: 2 },
-  divider: { width: 1, height: '70%', backgroundColor: '#EEE', marginHorizontal: 10 },
+  dateText: { fontSize: 13, fontWeight: 'bold' },
+  timeText: { fontSize: 16, fontWeight: 'bold', marginTop: 2 },
+  divider: { width: 1, height: '70%', marginHorizontal: 10 },
   infoContainer: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center' },
-  petName: { fontSize: 16, fontWeight: 'bold', color: COLORES.texto },
-  serviceText: { fontSize: 12, color: COLORES.textoSecundario, marginVertical: 3, textTransform: 'uppercase', fontWeight: '600' },
-  clientName: { fontSize: 12, color: '#999' },
+  petName: { fontSize: 16, fontWeight: 'bold' },
+  serviceText: { fontSize: 12, marginVertical: 3, textTransform: 'uppercase', fontWeight: '600' },
+  clientName: { fontSize: 12 },
   statusIcon: { marginLeft: 5 },
-  horizontalLine: { height: 1, backgroundColor: '#F5F5F5', width: '100%' },
+  horizontalLine: { height: 1, width: '100%' },
 
-  actionsContainer: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 12, backgroundColor: '#FAFAFA' },
+  actionsContainer: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 12 },
   actionButton: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5 },
-  actionText: { fontSize: 12, fontWeight: '600', color: COLORES.textoSecundario, marginLeft: 5 },
+  actionText: { fontSize: 12, fontWeight: '600', marginLeft: 5 },
 
   completedState: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flex: 1 },
-  completedText: { fontSize: 14, fontWeight: 'bold', color: COLORES.principal },
-  tapToViewText: { fontSize: 12, color: '#999', marginLeft: 8, fontStyle: 'italic' },
+  completedText: { fontSize: 14, fontWeight: 'bold' },
+  tapToViewText: { fontSize: 12, marginLeft: 8, fontStyle: 'italic' },
 
   emptyContainer: { alignItems: 'center', marginTop: 80 },
-  emptyText: { fontSize: 18, fontWeight: 'bold', color: COLORES.textoSecundario, marginTop: 10 },
-  emptySubText: { fontSize: 14, color: COLORES.inactivo },
+  emptyText: { fontSize: 18, fontWeight: 'bold', marginTop: 10 },
+  emptySubText: { fontSize: 14 },
 });

@@ -26,6 +26,9 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { supabase } from '../../lib/supabase';
 import { COLORES } from '../../constants/colors';
 
+// 1. Importar ThemeContext
+import { useTheme } from '../../context/ThemeContext';
+
 const { width, height } = Dimensions.get('window');
 
 interface AddPetModalProps {
@@ -36,46 +39,40 @@ interface AddPetModalProps {
 }
 
 export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: AddPetModalProps) {
-  // Animación para el modal principal
   const scaleValue = useRef(new Animated.Value(0)).current;
-  
-  // Animación para el selector de fotos (Menú nuevo)
   const optionsScaleValue = useRef(new Animated.Value(0)).current;
-
   const [loading, setLoading] = useState(false);
   
+  // 2. Usar tema
+  const { theme, isDark } = useTheme();
+
   // Estados del formulario
   const [nombre, setNombre] = useState('');
   const [raza, setRaza] = useState('');
   const [sexo, setSexo] = useState('');
   const [observaciones, setObservaciones] = useState('');
   
-  // Fecha
   const [date, setDate] = useState(new Date()); 
   const [fechaNacimientoText, setFechaNacimientoText] = useState(''); 
   const [showDatePicker, setShowDatePicker] = useState(false); 
 
-  // Dropdown y Selector de Imagen
   const [showSexDropdown, setShowSexDropdown] = useState(false);
-  const [showImageOptions, setShowImageOptions] = useState(false); // Nuevo estado para el menú de fotos
+  const [showImageOptions, setShowImageOptions] = useState(false);
 
-  // Estado para la foto
   const [imageUri, setImageUri] = useState<string | null>(null);
 
-  // 1. Animación de entrada del Modal Principal
   useEffect(() => {
     if (visible) {
       scaleValue.setValue(0);
       Animated.spring(scaleValue, {
         toValue: 1,
-        friction: 6,   // Menor fricción = más rebote
-        tension: 50,   // Tensión del resorte
+        friction: 6,   
+        tension: 50,   
         useNativeDriver: true,
       }).start();
     }
   }, [visible]);
 
-  // 2. Animación de entrada del Menú de Fotos (Cuando se activa)
   useEffect(() => {
     if (showImageOptions) {
       optionsScaleValue.setValue(0);
@@ -88,10 +85,8 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
     }
   }, [showImageOptions]);
 
-  // --- LÓGICA DE IMAGEN (Sin cambios funcionales, solo UI) ---
-  
   const handleOpenImagePicker = () => {
-    setShowImageOptions(true); // En lugar de Alert, abrimos nuestro menú personalizado
+    setShowImageOptions(true); 
   };
 
   const handleCloseImagePicker = () => {
@@ -99,13 +94,12 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
   };
 
   const pickImage = async (mode: 'camera' | 'gallery') => {
-    // Cerramos el menú de opciones antes de proceder
     handleCloseImagePicker();
 
     try {
       let result;
       const options: ImagePicker.ImagePickerOptions = {
-        mediaTypes: ['images'], // Actualizado para nuevas versiones de Expo
+        mediaTypes: ['images'], 
         allowsEditing: true,
         aspect: [4, 3],
         quality: 1, 
@@ -128,7 +122,6 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
       }
 
       if (!result.canceled) {
-        // Compresión
         const manipResult = await ImageManipulator.manipulateAsync(
           result.assets[0].uri,
           [{ resize: { width: 800 } }], 
@@ -141,7 +134,6 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
     }
   };
 
-  // Subida a Supabase
   const uploadImageToSupabase = async (uri: string) => {
     try {
       const ext = uri.substring(uri.lastIndexOf('.') + 1);
@@ -235,6 +227,18 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
     onClose();
   };
 
+  // Estilos dinámicos
+  const inputStyle = [
+      styles.input, 
+      { 
+          backgroundColor: theme.inputBackground, 
+          borderColor: theme.border,
+          color: theme.text
+      }
+  ];
+  const textColor = { color: theme.text };
+  const placeholderColor = theme.textSecondary;
+
   return (
     <Modal
       visible={visible}
@@ -246,29 +250,28 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
         style={styles.centeredView}
       >
-        {/* Overlay para cerrar al tocar fuera */}
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose} />
 
-        <Animated.View style={[styles.modalView, { transform: [{ scale: scaleValue }] }]}>
+        {/* Fondo Modal Dinámico */}
+        <Animated.View style={[styles.modalView, { transform: [{ scale: scaleValue }], backgroundColor: theme.card }]}>
           
-          {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.modalTitle}>Registrar Mascota</Text>
+            <Text style={[styles.modalTitle, textColor]}>Registrar Mascota</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeIcon}>
-              <MaterialCommunityIcons name="close" size={24} color={COLORES.textoSecundario} />
+              <MaterialCommunityIcons name="close" size={24} color={theme.textSecondary} />
             </TouchableOpacity>
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
             
-            {/* FOTO con selector personalizado */}
+            {/* FOTO (Colores dinámicos) */}
             <View style={styles.uploadContainer}>
                 <TouchableOpacity onPress={handleOpenImagePicker} style={styles.imageWrapper} activeOpacity={0.8}>
                     {imageUri ? (
                         <Image source={{ uri: imageUri }} style={styles.previewImage} />
                     ) : (
-                        <View style={styles.uploadIconBg}>
-                            <MaterialCommunityIcons name="camera-plus-outline" size={32} color={COLORES.principal} />
+                        <View style={[styles.uploadIconBg, { borderColor: theme.primary, backgroundColor: isDark ? '#1a1a1a' : '#FAFAFA' }]}>
+                            <MaterialCommunityIcons name="camera-plus-outline" size={32} color={theme.primary} />
                         </View>
                     )}
                     {imageUri && (
@@ -277,7 +280,7 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
                         </View>
                     )}
                 </TouchableOpacity>
-                <Text style={styles.uploadText}>
+                <Text style={[styles.uploadText, { color: theme.primary }]}>
                     {imageUri ? "Cambiar foto" : "Añadir foto"}
                 </Text>
             </View>
@@ -285,23 +288,23 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
             {/* Formulario */}
             <View style={styles.row}>
                 <View style={styles.halfInput}>
-                    <Text style={styles.label}>Nombre *</Text>
+                    <Text style={[styles.label, { color: theme.textSecondary }]}>Nombre *</Text>
                     <TextInput 
-                        style={styles.input} 
+                        style={inputStyle} 
                         value={nombre} 
                         onChangeText={setNombre} 
                         placeholder="Ej. Firulais"
-                        placeholderTextColor="#CCC"
+                        placeholderTextColor={placeholderColor}
                     />
                 </View>
                 <View style={styles.halfInput}>
-                    <Text style={styles.label}>Raza *</Text>
+                    <Text style={[styles.label, { color: theme.textSecondary }]}>Raza *</Text>
                     <TextInput 
-                        style={styles.input} 
+                        style={inputStyle} 
                         value={raza} 
                         onChangeText={setRaza} 
                         placeholder="Ej. Mestizo"
-                        placeholderTextColor="#CCC"
+                        placeholderTextColor={placeholderColor}
                     />
                 </View>
             </View>
@@ -309,24 +312,24 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
             <View style={[styles.row, { zIndex: 10 }]}> 
                 {/* Dropdown Sexo */}
                 <View style={styles.halfInput}>
-                    <Text style={styles.label}>Sexo</Text>
+                    <Text style={[styles.label, { color: theme.textSecondary }]}>Sexo</Text>
                     <TouchableOpacity 
-                        style={styles.dropdownButton} 
+                        style={[styles.dropdownButton, { backgroundColor: theme.inputBackground, borderColor: theme.border }]} 
                         onPress={() => setShowSexDropdown(!showSexDropdown)}
                     >
-                        <Text style={{ color: sexo ? COLORES.texto : '#999', fontSize: 14 }}>
+                        <Text style={{ color: sexo ? theme.text : placeholderColor, fontSize: 14 }}>
                             {sexo || 'Seleccionar'}
                         </Text>
-                        <MaterialCommunityIcons name="chevron-down" size={20} color={COLORES.texto} />
+                        <MaterialCommunityIcons name="chevron-down" size={20} color={theme.text} />
                     </TouchableOpacity>
                     
                     {showSexDropdown && (
-                        <View style={styles.dropdownList}>
-                            <TouchableOpacity style={styles.dropdownItem} onPress={() => { setSexo('Macho'); setShowSexDropdown(false); }}>
-                                <Text style={styles.dropdownItemText}>Macho</Text>
+                        <View style={[styles.dropdownList, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                            <TouchableOpacity style={[styles.dropdownItem, { borderBottomColor: theme.border }]} onPress={() => { setSexo('Macho'); setShowSexDropdown(false); }}>
+                                <Text style={[styles.dropdownItemText, textColor]}>Macho</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity style={styles.dropdownItem} onPress={() => { setSexo('Hembra'); setShowSexDropdown(false); }}>
-                                <Text style={styles.dropdownItemText}>Hembra</Text>
+                            <TouchableOpacity style={[styles.dropdownItem, { borderBottomColor: theme.border }]} onPress={() => { setSexo('Hembra'); setShowSexDropdown(false); }}>
+                                <Text style={[styles.dropdownItemText, textColor]}>Hembra</Text>
                             </TouchableOpacity>
                         </View>
                     )}
@@ -334,20 +337,20 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
 
                 {/* Selector de Fecha */}
                 <View style={styles.halfInput}>
-                    <Text style={styles.label}>Nacimiento</Text>
+                    <Text style={[styles.label, { color: theme.textSecondary }]}>Nacimiento</Text>
                     <TouchableOpacity 
-                        style={styles.dateContainer}
+                        style={[styles.dateContainer, { backgroundColor: theme.inputBackground, borderColor: theme.border }]}
                         onPress={() => setShowDatePicker(true)} 
                         activeOpacity={0.7}
                     >
                         <Text style={{ 
                             fontSize: 14, 
-                            color: fechaNacimientoText ? COLORES.texto : '#CCC',
+                            color: fechaNacimientoText ? theme.text : placeholderColor,
                             flex: 1 
                         }}>
                             {fechaNacimientoText || 'dd/mm/aaaa'}
                         </Text>
-                        <MaterialCommunityIcons name="calendar" size={18} color={COLORES.textoSecundario} />
+                        <MaterialCommunityIcons name="calendar" size={18} color={theme.textSecondary} />
                     </TouchableOpacity>
 
                     {showDatePicker && (
@@ -363,11 +366,11 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
             </View>
 
             <View style={styles.inputGroup}>
-                <Text style={styles.label}>Observaciones</Text>
+                <Text style={[styles.label, { color: theme.textSecondary }]}>Observaciones</Text>
                 <TextInput
-                    style={[styles.input, styles.textArea]}
+                    style={[inputStyle, styles.textArea]}
                     placeholder="Alergias, carácter..."
-                    placeholderTextColor="#CCC"
+                    placeholderTextColor={placeholderColor}
                     multiline={true}
                     numberOfLines={3}
                     value={observaciones}
@@ -377,8 +380,11 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
             </View>
 
             <View style={styles.footer}>
-                <TouchableOpacity style={styles.btnCancel} onPress={onClose}>
-                    <Text style={styles.textCancel}>Cancelar</Text>
+                <TouchableOpacity 
+                    style={[styles.btnCancel, { backgroundColor: theme.inputBackground }]} 
+                    onPress={onClose}
+                >
+                    <Text style={[styles.textCancel, { color: theme.textSecondary }]}>Cancelar</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.btnSave} onPress={handleSave} disabled={loading}>
@@ -393,26 +399,24 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
             <View style={{ height: 20 }} />
           </ScrollView>
 
-          {/* --- MENÚ OVERLAY DE SELECCIÓN DE FOTO (MODERNO) --- */}
+          {/* Menú de Foto (Estilo dinámico) */}
           {showImageOptions && (
             <View style={styles.optionsOverlay}>
               <TouchableWithoutFeedback onPress={handleCloseImagePicker}>
-                 <View style={styles.optionsBackdrop} />
+                 <View style={[styles.optionsBackdrop, { backgroundColor: isDark ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.8)' }]} />
               </TouchableWithoutFeedback>
               
-              <Animated.View style={[styles.optionsContainer, { transform: [{ scale: optionsScaleValue }] }]}>
-                <Text style={styles.optionsTitle}>Añadir Foto de Mascota</Text>
-                <Text style={styles.optionsSubtitle}>Elige una opción</Text>
+              <Animated.View style={[styles.optionsContainer, { transform: [{ scale: optionsScaleValue }], backgroundColor: theme.card }]}>
+                <Text style={[styles.optionsTitle, textColor]}>Añadir Foto de Mascota</Text>
+                <Text style={[styles.optionsSubtitle, { color: theme.textSecondary }]}>Elige una opción</Text>
 
-                {/* Opción Cámara */}
-                <TouchableOpacity style={[styles.optionCard, { backgroundColor: COLORES.principal }]} onPress={() => pickImage('camera')}>
+                <TouchableOpacity style={[styles.optionCard, { backgroundColor: theme.primary }]} onPress={() => pickImage('camera')}>
                    <View style={styles.optionIconCircle}>
-                      <MaterialCommunityIcons name="camera" size={24} color={COLORES.principal} />
+                      <MaterialCommunityIcons name="camera" size={24} color={theme.primary} />
                    </View>
                    <Text style={styles.optionText}>TOMAR FOTO</Text>
                 </TouchableOpacity>
 
-                {/* Opción Galería */}
                 <TouchableOpacity style={[styles.optionCard, { backgroundColor: COLORES.principalDark, marginTop: 12 }]} onPress={() => pickImage('gallery')}>
                    <View style={styles.optionIconCircle}>
                       <MaterialCommunityIcons name="image-multiple" size={24} color={COLORES.principalDark} />
@@ -420,9 +424,8 @@ export default function AddPetModal({ visible, onClose, clientId, onPetAdded }: 
                    <Text style={styles.optionText}>ELEGIR DE GALERÍA</Text>
                 </TouchableOpacity>
 
-                {/* Cancelar */}
                 <TouchableOpacity style={styles.optionCancel} onPress={handleCloseImagePicker}>
-                   <Text style={styles.optionCancelText}>Cancelar</Text>
+                   <Text style={[styles.optionCancelText, { color: theme.textSecondary }]}>Cancelar</Text>
                 </TouchableOpacity>
               </Animated.View>
             </View>
@@ -447,7 +450,6 @@ const styles = StyleSheet.create({
   modalView: {
     width: width * 0.9,
     maxHeight: height * 0.85,
-    backgroundColor: COLORES.fondoBlanco,
     borderRadius: 20,
     padding: 25,
     shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 15,
@@ -455,22 +457,21 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#F5F5F5',
+    marginBottom: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: 'transparent',
   },
-  modalTitle: { fontSize: 22, fontWeight: 'bold', color: COLORES.texto },
+  modalTitle: { fontSize: 22, fontWeight: 'bold' },
   closeIcon: { padding: 5 },
   scrollContent: { paddingBottom: 10 },
   
-  // --- Estilos FOTO ---
   uploadContainer: { alignItems: 'center', marginBottom: 20 },
   imageWrapper: { 
     position: 'relative', marginBottom: 8,
     shadowColor: COLORES.principal, shadowOffset: {width:0, height:4}, shadowOpacity:0.2, shadowRadius:5, elevation:5
   },
   uploadIconBg: { 
-    width: 90, height: 90, borderRadius: 45, backgroundColor: '#FAFAFA', 
+    width: 90, height: 90, borderRadius: 45, 
     justifyContent: 'center', alignItems: 'center',
-    borderWidth: 2, borderColor: COLORES.principal, borderStyle: 'dashed'
+    borderWidth: 2, borderStyle: 'dashed'
   },
   previewImage: {
     width: 90, height: 90, borderRadius: 45, borderWidth: 2, borderColor: COLORES.principal
@@ -480,43 +481,41 @@ const styles = StyleSheet.create({
     width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center',
     borderWidth: 2, borderColor: 'white'
   },
-  uploadText: { color: COLORES.principal, fontWeight: '600', fontSize: 14, marginTop: 5 },
+  uploadText: { fontWeight: '600', fontSize: 14, marginTop: 5 },
 
-  // --- Inputs ---
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
   halfInput: { width: '48%' },
   inputGroup: { marginBottom: 15 },
-  label: { fontSize: 13, color: COLORES.textoSecundario, marginBottom: 6, fontWeight: '600' },
+  label: { fontSize: 13, marginBottom: 6, fontWeight: '600' },
   input: {
-    backgroundColor: COLORES.fondoGris, borderRadius: 12, padding: 12, fontSize: 14, color: COLORES.texto,
-    borderWidth: 1, borderColor: '#EEE',
+    borderRadius: 12, padding: 12, fontSize: 14,
+    borderWidth: 1,
   },
   textArea: { height: 80 },
   dropdownButton: {
-    backgroundColor: COLORES.fondoGris, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#EEE',
+    borderRadius: 12, padding: 10, borderWidth: 1,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: 48,
   },
   dropdownList: {
-    position: 'absolute', top: 52, left: 0, right: 0, backgroundColor: 'white', borderRadius: 8,
+    position: 'absolute', top: 52, left: 0, right: 0, borderRadius: 8, borderWidth: 1,
     elevation: 5, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, zIndex: 1000,
   },
-  dropdownItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  dropdownItemText: { fontSize: 14, color: COLORES.texto },
+  dropdownItem: { padding: 12, borderBottomWidth: 1 },
+  dropdownItemText: { fontSize: 14 },
   dateContainer: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: COLORES.fondoGris, borderRadius: 12, paddingHorizontal: 12, 
-    borderWidth: 1, borderColor: '#EEE', height: 48
+    borderRadius: 12, paddingHorizontal: 12, 
+    borderWidth: 1, height: 48
   },
   footer: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 25, gap: 10 },
   btnCancel: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12 },
-  textCancel: { color: COLORES.textoSecundario, fontWeight: 'bold', fontSize: 15 },
+  textCancel: { fontWeight: 'bold', fontSize: 15 },
   btnSave: {
     backgroundColor: COLORES.principal, paddingVertical: 12, paddingHorizontal: 30, borderRadius: 12,
     shadowColor: COLORES.principal, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
   },
   textSave: { color: COLORES.textoSobrePrincipal, fontWeight: 'bold', fontSize: 15 },
 
-  // --- NUEVOS ESTILOS: Menú de Opciones de Imagen (Overlay) ---
   optionsOverlay: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     justifyContent: 'center', alignItems: 'center',
@@ -524,15 +523,14 @@ const styles = StyleSheet.create({
   },
   optionsBackdrop: {
     position: 'absolute', width: '100%', height: '100%',
-    backgroundColor: 'rgba(255,255,255,0.8)', // Fondo blanco semitransparente para desenfoque
   },
   optionsContainer: {
-    width: '85%', backgroundColor: 'white', borderRadius: 25, padding: 25,
+    width: '85%', borderRadius: 25, padding: 25,
     shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.2, shadowRadius: 20, elevation: 10,
     alignItems: 'center'
   },
-  optionsTitle: { fontSize: 20, fontWeight: 'bold', color: COLORES.texto, marginBottom: 5 },
-  optionsSubtitle: { fontSize: 14, color: COLORES.textoSecundario, marginBottom: 20 },
+  optionsTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 5 },
+  optionsSubtitle: { fontSize: 14, marginBottom: 20 },
   
   optionCard: {
     width: '100%', paddingVertical: 15, paddingHorizontal: 20, borderRadius: 16,
@@ -546,5 +544,5 @@ const styles = StyleSheet.create({
   optionText: { color: 'white', fontSize: 16, fontWeight: 'bold', letterSpacing: 0.5 },
   
   optionCancel: { marginTop: 20, padding: 10 },
-  optionCancelText: { color: COLORES.textoSecundario, fontWeight: '600', fontSize: 15 }
+  optionCancelText: { fontWeight: '600', fontSize: 15 }
 });

@@ -12,24 +12,15 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import LottieView from 'lottie-react-native'; 
-
-// --- IMPORTANTE: Importamos los colores globales ---
 import { COLORES } from '../constants/colors';
-
-// Tipado básico para la navegación
-type NavigationProps = {
-  navigate: (screen: string) => void;
-};
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const navigation = useNavigation<NavigationProps>();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -55,7 +46,6 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* StatusBar con el color principal (Verde) */}
       <StatusBar barStyle="light-content" backgroundColor={COLORES.principal} />
 
       <KeyboardAvoidingView
@@ -63,7 +53,7 @@ export default function LoginScreen() {
         style={styles.container}
       >
         <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-          {/* --- 1. EL CABEZAL DE COLOR (Ahora Verde) --- */}
+          {/* Cabecera */}
           <View style={styles.headerContainer}>
             <LottieView
               source={require('../assets/pet-animation.json')}
@@ -75,11 +65,11 @@ export default function LoginScreen() {
             <Text style={styles.headerSubtitle}>Bienvenido a Ohmypet</Text>
           </View>
 
-          {/* --- 2. EL FORMULARIO BLANCO --- */}
+          {/* Formulario */}
           <View style={styles.formContainer}>
             <Text style={styles.formTitle}>Login</Text>
 
-            {/* Input de Email */}
+            {/* Input Email */}
             <View style={styles.inputContainer}>
               <MaterialCommunityIcons
                 name="email-outline"
@@ -99,7 +89,7 @@ export default function LoginScreen() {
               />
             </View>
 
-            {/* Input de Contraseña */}
+            {/* Input Contraseña */}
             <View style={styles.inputContainer}>
               <MaterialCommunityIcons
                 name="lock-outline"
@@ -118,7 +108,7 @@ export default function LoginScreen() {
               />
             </View>
 
-            {/* Botón de Ingresar (Verde) */}
+            {/* Botón Ingresar */}
             <TouchableOpacity
               style={[styles.button, loading && styles.buttonDisabled]}
               onPress={handleLogin}
@@ -129,16 +119,8 @@ export default function LoginScreen() {
               </Text>
             </TouchableOpacity>
 
-            {/* Link a Registro */}
-            <View style={styles.registerContainer}>
-              <Text style={styles.registerText}>¿No tienes cuenta? </Text>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('Register')}
-                disabled={loading}
-              >
-                <Text style={styles.registerButtonText}>Regístrate</Text>
-              </TouchableOpacity>
-            </View>
+            {/* --- AQUÍ ELIMINAMOS EL BOTÓN DE REGISTRO --- */}
+            
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -149,14 +131,14 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: COLORES.principal, // Fondo verde detrás de la status bar
+    backgroundColor: COLORES.principal,
   },
   container: {
     flex: 1,
-    backgroundColor: COLORES.fondoGris, // Usamos fondoGris en lugar de principalClaro
+    backgroundColor: COLORES.fondoGris,
   },
   headerContainer: {
-    backgroundColor: COLORES.principal, // Cabecera Verde
+    backgroundColor: COLORES.principal,
     paddingTop: 30,
     paddingBottom: 50,
     paddingHorizontal: 30,
@@ -200,7 +182,7 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORES.fondoGris, // Input con fondo gris claro verdoso
+    backgroundColor: COLORES.fondoGris,
     borderRadius: 12,
     marginBottom: 15,
     height: 55,
@@ -219,7 +201,7 @@ const styles = StyleSheet.create({
   button: {
     width: '100%',
     height: 55,
-    backgroundColor: COLORES.principal, // Botón verde
+    backgroundColor: COLORES.principal,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -235,22 +217,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
-  registerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 30,
-  },
-  registerText: {
-    fontSize: 16,
-    color: COLORES.textoSecundario,
-  },
-  registerButtonText: {
-    color: COLORES.principal, // Link verde
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
   buttonDisabled: {
-    backgroundColor: COLORES.inactivo, // Usamos el color inactivo del tema
+    backgroundColor: COLORES.inactivo,
   },
 });

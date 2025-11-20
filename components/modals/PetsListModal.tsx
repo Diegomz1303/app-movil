@@ -15,6 +15,9 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { COLORES } from '../../constants/colors';
 
+// 1. Importar ThemeContext
+import { useTheme } from '../../context/ThemeContext';
+
 const { height, width } = Dimensions.get('window');
 
 interface PetsListModalProps {
@@ -37,17 +40,15 @@ type PetData = {
 export default function PetsListModal({ visible, onClose }: PetsListModalProps) {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
-  
-  // Ya no necesitamos 'allPets' y 'filteredPets' por separado.
-  // Solo una lista que contiene lo que traiga la base de datos.
   const [pets, setPets] = useState<PetData[]>([]);
 
-  // Función optimizada que recibe el término de búsqueda
+  // 2. Usar tema
+  const { theme, isDark } = useTheme();
+
   const fetchPets = async (searchTerm: string = '') => {
     setLoading(true);
     
     try {
-      // 1. Iniciamos la consulta base
       let query = supabase
         .from('mascotas')
         .select(`
@@ -61,13 +62,9 @@ export default function PetsListModal({ visible, onClose }: PetsListModalProps) 
           )
         `)
         .order('created_at', { ascending: false })
-        .limit(50); // BUENA PRÁCTICA: Traer solo los primeros 50 resultados para no saturar
+        .limit(50); 
 
-      // 2. Si hay texto, aplicamos el filtro 'ilike' (insensible a mayúsculas/minúsculas)
       if (searchTerm.trim().length > 0) {
-        // Buscamos por nombre de mascota O raza
-        // Nota: Buscar por nombre de dueño dentro de una relación requiere lógica más compleja en Supabase,
-        // por rendimiento nos enfocamos aquí en los datos directos de la mascota.
         query = query.or(`nombre.ilike.%${searchTerm}%,raza.ilike.%${searchTerm}%`);
       }
 
@@ -91,50 +88,52 @@ export default function PetsListModal({ visible, onClose }: PetsListModalProps) 
     }
   };
 
-  // 1. Cargar datos iniciales al abrir
   useEffect(() => {
     if (visible) {
       setSearch('');
-      fetchPets(''); // Carga inicial sin filtros
+      fetchPets('');
     }
   }, [visible]);
 
-  // 2. DEBOUNCE: Efecto inteligente para la búsqueda
   useEffect(() => {
-    // Creamos un temporizador que espera 500ms antes de ejecutar la búsqueda
     const delayDebounceFn = setTimeout(() => {
       if (visible) {
         fetchPets(search);
       }
     }, 500);
 
-    // Si el usuario sigue escribiendo antes de los 500ms, limpiamos el temporizador anterior
     return () => clearTimeout(delayDebounceFn);
   }, [search, visible]);
 
+  // Estilos dinámicos
+  const textColor = { color: theme.text };
+  const textSecondary = { color: theme.textSecondary };
+  const inputBg = { backgroundColor: theme.inputBackground };
+  const cardBg = { backgroundColor: theme.card, borderColor: theme.border };
+
   const renderItem = ({ item }: { item: PetData }) => (
-    <TouchableOpacity style={styles.petCard} activeOpacity={0.7}>
+    <TouchableOpacity style={[styles.petCard, cardBg]} activeOpacity={0.7}>
       <View style={styles.avatarContainer}>
         {item.foto_url ? (
-          <Image source={{ uri: item.foto_url }} style={styles.petImage} />
+          <Image source={{ uri: item.foto_url }} style={[styles.petImage, { borderColor: theme.border }]} />
         ) : (
-          <View style={styles.petIconBg}>
-            <MaterialCommunityIcons name="dog" size={24} color={COLORES.principal} />
+          <View style={[styles.petIconBg, { backgroundColor: theme.inputBackground }]}>
+            <MaterialCommunityIcons name="dog" size={24} color={theme.primary} />
           </View>
         )}
       </View>
 
       <View style={styles.infoContainer}>
-        <Text style={styles.petName}>{item.nombre}</Text>
-        <Text style={styles.petInfo}>{item.raza}</Text>
+        <Text style={[styles.petName, textColor]}>{item.nombre}</Text>
+        <Text style={[styles.petInfo, textSecondary]}>{item.raza}</Text>
         
         <View style={styles.ownerRow}>
-          <MaterialCommunityIcons name="account" size={12} color={COLORES.textoSecundario} />
-          <Text style={styles.ownerText}>{item.ownerName}</Text>
+          <MaterialCommunityIcons name="account" size={12} color={theme.textSecondary} />
+          <Text style={[styles.ownerText, textSecondary]}>{item.ownerName}</Text>
         </View>
       </View>
 
-      <MaterialCommunityIcons name="chevron-right" size={20} color={COLORES.inactivo} />
+      <MaterialCommunityIcons name="chevron-right" size={20} color={theme.textSecondary} />
     </TouchableOpacity>
   );
 
@@ -150,36 +149,37 @@ export default function PetsListModal({ visible, onClose }: PetsListModalProps) 
       propagateSwipe
       backdropOpacity={0.6}
     >
-      <View style={styles.container}>
+      {/* Fondo del Modal Dinámico */}
+      <View style={[styles.container, { backgroundColor: theme.card }]}>
         
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Directorio de Mascotas</Text>
+          <Text style={[styles.title, textColor]}>Directorio de Mascotas</Text>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <MaterialCommunityIcons name="close" size={24} color={COLORES.textoSecundario} />
+            <MaterialCommunityIcons name="close" size={24} color={theme.textSecondary} />
           </TouchableOpacity>
         </View>
 
         {/* Buscador */}
-        <View style={styles.searchContainer}>
-          <MaterialCommunityIcons name="magnify" size={24} color={COLORES.textoSecundario} />
+        <View style={[styles.searchContainer, inputBg]}>
+          <MaterialCommunityIcons name="magnify" size={24} color={theme.textSecondary} />
           <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar nombre o raza..." // Actualizado para reflejar el filtro real
-            placeholderTextColor="#999"
+            style={[styles.searchInput, textColor]}
+            placeholder="Buscar nombre o raza..."
+            placeholderTextColor={theme.textSecondary}
             value={search}
-            onChangeText={setSearch} // Solo actualiza el estado, el useEffect maneja la llamada API
+            onChangeText={setSearch}
           />
           {search.length > 0 && (
             <TouchableOpacity onPress={() => setSearch('')}>
-               <MaterialCommunityIcons name="close-circle" size={18} color="#999" />
+               <MaterialCommunityIcons name="close-circle" size={18} color={theme.textSecondary} />
             </TouchableOpacity>
           )}
         </View>
 
         {/* Lista */}
         {loading ? (
-          <ActivityIndicator size="large" color={COLORES.principal} style={{ marginTop: 40 }} />
+          <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 40 }} />
         ) : (
           <FlatList
             data={pets}
@@ -190,8 +190,8 @@ export default function PetsListModal({ visible, onClose }: PetsListModalProps) 
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <MaterialCommunityIcons name="paw-off" size={50} color={COLORES.inactivo} />
-                <Text style={styles.emptyText}>No hay mascotas encontradas.</Text>
-                <Text style={styles.emptySubText}>
+                <Text style={[styles.emptyText, textSecondary]}>No hay mascotas encontradas.</Text>
+                <Text style={[styles.emptySubText, textSecondary]}>
                   Intenta con otro término.
                 </Text>
               </View>
@@ -210,7 +210,6 @@ const styles = StyleSheet.create({
     margin: 0, 
   },
   container: {
-    backgroundColor: COLORES.fondoBlanco,
     borderRadius: 25, 
     padding: 20,
     width: width * 0.9, 
@@ -221,45 +220,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     marginBottom: 15,
   },
-  title: { fontSize: 20, fontWeight: 'bold', color: COLORES.texto },
+  title: { fontSize: 20, fontWeight: 'bold' },
   closeButton: { padding: 5 },
   
   searchContainer: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: COLORES.fondoGris,
     borderRadius: 12, paddingHorizontal: 12, height: 45,
     marginBottom: 15,
   },
-  searchInput: { flex: 1, marginLeft: 8, fontSize: 15, color: COLORES.texto },
+  searchInput: { flex: 1, marginLeft: 8, fontSize: 15 },
   
   listContent: { paddingBottom: 10 },
   
   emptyState: { alignItems: 'center', marginTop: 40, paddingHorizontal: 20 },
-  emptyText: { fontSize: 16, fontWeight: 'bold', color: COLORES.textoSecundario, marginTop: 15 },
-  emptySubText: { 
-    fontSize: 13, color: '#999', textAlign: 'center', marginTop: 5 
-  },
+  emptyText: { fontSize: 16, fontWeight: 'bold', marginTop: 15 },
+  emptySubText: { fontSize: 13, textAlign: 'center', marginTop: 5 },
 
   petCard: {
     flexDirection: 'row', alignItems: 'center',
     padding: 12, marginBottom: 10,
-    backgroundColor: '#FFF', borderRadius: 12,
-    borderWidth: 1, borderColor: '#F0F0F0',
+    borderRadius: 12, borderWidth: 1,
     shadowColor: '#000', shadowOpacity: 0.03, shadowOffset: {width:0, height:2}, elevation: 1
   },
   avatarContainer: { marginRight: 12 },
   petIconBg: {
     width: 50, height: 50, borderRadius: 25,
-    backgroundColor: COLORES.fondoGris,
     alignItems: 'center', justifyContent: 'center'
   },
   petImage: {
-    width: 50, height: 50, borderRadius: 25,
-    backgroundColor: COLORES.fondoGris,
+    width: 50, height: 50, borderRadius: 25, borderWidth: 1
   },
   infoContainer: { flex: 1 },
-  petName: { fontSize: 16, fontWeight: 'bold', color: COLORES.texto },
-  petInfo: { fontSize: 13, color: COLORES.textoSecundario, marginBottom: 2 },
+  petName: { fontSize: 16, fontWeight: 'bold' },
+  petInfo: { fontSize: 13, marginBottom: 2 },
   ownerRow: { flexDirection: 'row', alignItems: 'center' },
-  ownerText: { fontSize: 12, color: '#999', marginLeft: 4 },
+  ownerText: { fontSize: 12, marginLeft: 4 },
 });

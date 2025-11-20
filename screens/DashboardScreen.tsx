@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, SafeAreaView, StatusBar } from 'react-native';
+import { StyleSheet, View, SafeAreaView, StatusBar, ImageBackground } from 'react-native';
 import { COLORES } from '../constants/colors';
+// 1. Importamos la librería de animación
+import * as Animatable from 'react-native-animatable';
 
 // Componentes de Pantallas
 import HomeTab from '../components/dashboard/HomeTab';
@@ -15,68 +17,101 @@ import BottomNavBar from '../components/ui/BottomNavBar';
 import AddClientModal from '../components/modals/AddClientModal';
 import PetsListModal from '../components/modals/PetsListModal';
 import AddAppointmentModal from '../components/modals/AddAppointmentModal';
+import ReportsModal from '../components/modals/ReportsModal';
 
-// Hook del Contexto
+// Hooks de Contexto
 import { useData } from '../context/DataContext';
+import { useTheme } from '../context/ThemeContext';
 
 type TabType = 'Home' | 'Citas' | 'Clientes' | 'Perfil';
 
 export default function DashboardScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('Home');
   
-  // Modales
+  // Estados de Modales
   const [clientModalVisible, setClientModalVisible] = useState(false);
   const [appointmentModalVisible, setAppointmentModalVisible] = useState(false);
   const [petsModalVisible, setPetsModalVisible] = useState(false);
+  const [reportsVisible, setReportsVisible] = useState(false);
   
-  // Usamos el contexto en lugar de estados locales para los triggers
   const { refreshClients, refreshAppointments } = useData();
+  const { theme, isDark } = useTheme(); 
 
-  // Lógica del Botón Central
   const handleMainButtonClick = () => {
     if (activeTab === 'Clientes') {
       setClientModalVisible(true);
     } else if (activeTab === 'Citas') {
       setAppointmentModalVisible(true);
     } else {
-      // Opcional: Podrías abrir un menú general aquí si estás en Home
       console.log("Botón inactivo en esta pantalla");
     }
   };
 
   const handleClientAdded = () => {
-    refreshClients(); // Actualiza la lista globalmente
+    refreshClients(); 
     setActiveTab('Clientes'); 
   };
 
   const handleAppointmentAdded = () => {
-    refreshAppointments(); // Actualiza la lista globalmente
+    refreshAppointments();
     setActiveTab('Citas');
   };
 
+  // --- 2. MODIFICAMOS LA LÓGICA DE RENDERIZADO ---
   const renderContent = () => {
+    let contentComponent;
+
     switch (activeTab) {
-      case 'Home': return <HomeTab />;
-      case 'Citas': return <CitasTab />; // Ya no necesita props
-      case 'Clientes': return <ClientesTab />; // Ya no necesita props
-      case 'Perfil': return <PerfilTab />;
-      default: return <HomeTab />;
+      case 'Home': contentComponent = <HomeTab />; break;
+      case 'Citas': contentComponent = <CitasTab />; break;
+      case 'Clientes': contentComponent = <ClientesTab />; break;
+      case 'Perfil': contentComponent = <PerfilTab />; break;
+      default: contentComponent = <HomeTab />; break;
     }
+
+    // Envolvemos el componente en una vista animada
+    // key={activeTab} es CRUCIAL: obliga a reiniciar la animación al cambiar de tab
+    return (
+      <Animatable.View
+        key={activeTab} // Identificador único para reiniciar animación
+        animation="fadeInUp" // Tipo de animación (puedes probar: fadeIn, zoomIn, slideInRight)
+        duration={500} // Duración en milisegundos (0.5 segundos)
+        style={{ flex: 1 }} // Ocupar todo el espacio
+        useNativeDriver={true} // Para mejor rendimiento
+      >
+        {contentComponent}
+      </Animatable.View>
+    );
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={COLORES.fondoGris} />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      <StatusBar 
+         barStyle={isDark ? "light-content" : "dark-content"} 
+         backgroundColor={theme.background} 
+      />
       
-      <View style={styles.mainContainer}>
-        {renderContent()}
-      </View>
+      <ImageBackground 
+        source={require('../assets/paw_pattern.png')} 
+        style={styles.backgroundImage}
+        imageStyle={{ 
+          opacity: isDark ? 0.05 : 0.15, 
+          resizeMode: 'repeat',
+          tintColor: isDark ? '#FFFFFF' : COLORES.principalDark 
+        }}
+      >
+        <View style={styles.mainContainer}>
+          {/* Aquí se renderiza el contenido animado */}
+          {renderContent()}
+        </View>
+      </ImageBackground>
 
       <BottomNavBar 
         activeTab={activeTab} 
         onTabChange={setActiveTab} 
         onAddClick={handleMainButtonClick} 
-        onPetsClick={() => setPetsModalVisible(true)} 
+        onPetsClick={() => setPetsModalVisible(true)}
+        onReportsClick={() => setReportsVisible(true)}
       />
 
       <AddClientModal 
@@ -95,6 +130,12 @@ export default function DashboardScreen() {
         visible={petsModalVisible}
         onClose={() => setPetsModalVisible(false)}
       />
+
+      <ReportsModal 
+        visible={reportsVisible} 
+        onClose={() => setReportsVisible(false)} 
+      />
+
     </SafeAreaView>
   );
 }
@@ -102,7 +143,11 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORES.fondoGris,
+  },
+  backgroundImage: {
+    flex: 1,
+    width: '100%',
+    height: '100%'
   },
   mainContainer: {
     flex: 1,
