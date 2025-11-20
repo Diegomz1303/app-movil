@@ -117,11 +117,22 @@ export default function AddAppointmentModal({ visible, onClose, onAppointmentAdd
     fetchPets(client.id);
   };
 
+  // --- AQUÍ ESTÁ LA CORRECCIÓN DE LA FECHA ---
   const onChangeDate = (event: DateTimePickerEvent, selectedDate?: Date) => {
     if (Platform.OS === 'android') setShowDatePicker(false);
+    
     if (event.type === 'set' && selectedDate) {
       setDate(selectedDate);
-      const formatted = selectedDate.toISOString().split('T')[0];
+      
+      // Usamos métodos locales (getFullYear, getMonth, getDate)
+      // Esto asegura que la fecha sea la del dispositivo, no UTC.
+      const year = selectedDate.getFullYear();
+      // getMonth() devuelve 0-11, por eso sumamos 1
+      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const day = String(selectedDate.getDate()).padStart(2, '0');
+      
+      // Formato estándar para base de datos: YYYY-MM-DD
+      const formatted = `${year}-${month}-${day}`;
       setFechaText(formatted);
     }
   };
@@ -222,7 +233,6 @@ export default function AddAppointmentModal({ visible, onClose, onAppointmentAdd
                 <MaterialCommunityIcons name={showClientDrop ? "chevron-up" : "chevron-down"} size={20} color={COLORES.texto} />
               </TouchableOpacity>
               
-              {/* LISTA TIPO ACORDEÓN (Sin Scroll Interno) */}
               {showClientDrop && (
                 <View style={styles.accordionContent}>
                     {clientsList.map(client => (
@@ -269,7 +279,7 @@ export default function AddAppointmentModal({ visible, onClose, onAppointmentAdd
                     <Text style={styles.label}>3. Fecha *</Text>
                     <TouchableOpacity style={styles.dropdownButton} onPress={() => setShowDatePicker(true)}>
                         <Text style={[styles.inputText, !fechaText && { color: '#CCC' }]}>
-                            {fechaText || 'dd/mm/aaaa'}
+                            {fechaText || 'YYYY-MM-DD'}
                         </Text>
                         <MaterialCommunityIcons name="calendar" size={20} color={COLORES.texto} />
                     </TouchableOpacity>
@@ -292,7 +302,7 @@ export default function AddAppointmentModal({ visible, onClose, onAppointmentAdd
                 </View>
             </View>
             
-            {/* LISTA DE HORAS (Se muestra debajo de la fila si está activa) */}
+            {/* LISTA DE HORAS */}
             {showTimeDrop && (
                 <View style={[styles.accordionContent, { marginTop: -10, marginBottom: 15 }]}>
                     <View style={styles.gridContainer}>

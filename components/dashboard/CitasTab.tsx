@@ -13,67 +13,90 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { COLORES } from '../../constants/colors';
 
+// Contexto
+import { useData } from '../../context/DataContext';
+
 // Modales
 import CompleteAppointmentModal from '../modals/CompleteAppointmentModal'; 
-import AppointmentDetailsModal from '../modals/AppointmentDetailsModal'; // <--- IMPORTAR NUEVO MODAL
+import AppointmentDetailsModal from '../modals/AppointmentDetailsModal';
 
-// Tipo de dato actualizado con los nuevos campos
-type Cita = {
+// --- INTERFAZ EXACTA DE LA RESPUESTA ---
+// Definimos la estructura incluyendo las relaciones (joins)
+export type Cita = {
   id: number;
   fecha: string;
   hora: string;
   servicio: string;
   estado: string; // 'pendiente' | 'confirmada' | 'completada'
+  notas?: string;
   
-  // Campos de completado
-  precio?: number;
-  peso?: number;
-  metodo_pago?: string;
-  shampoo?: string;
-  observaciones_finales?: string;
-  foto_llegada?: string;
-  foto_salida?: string;
-  foto_boleta?: string;
+  // Campos de completado (pueden ser null)
+  precio?: number | null;
+  peso?: number | null;
+  metodo_pago?: string | null;
+  shampoo?: string | null;
+  observaciones_finales?: string | null;
+  foto_llegada?: string | null;
+  foto_salida?: string | null;
+  foto_boleta?: string | null;
 
-  // Relaciones
-  clientes: { nombres: string; apellidos: string; };
-  mascotas: { nombre: string; };
+  // Relaciones (Supabase las devuelve como objetos si es relación 1:1 o N:1)
+  clientes: { 
+    nombres: string; 
+    apellidos: string; 
+  } | null; // Puede ser null si se borró el cliente (depende de tu FK)
+  
+  mascotas: { 
+    nombre: string; 
+  } | null;
 };
 
-export default function CitasTab({ refreshTrigger }: { refreshTrigger: number }) {
+export default function CitasTab() {
   const [citas, setCitas] = useState<Cita[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Consumimos contexto
+  const { appointmentsTrigger, refreshAppointments } = useData();
+
   // Estados Modales
   const [completeModalVisible, setCompleteModalVisible] = useState(false);
-  const [detailsModalVisible, setDetailsModalVisible] = useState(false); // <--- ESTADO NUEVO MODAL
+  const [detailsModalVisible, setDetailsModalVisible] = useState(false);
   
   const [selectedCita, setSelectedCita] = useState<Cita | null>(null);
 
-  // --- CARGAR CITAS (Query Actualizada) ---
+  // --- CARGAR CITAS CON TIPADO ---
   const fetchCitas = async () => {
     if (!refreshing) setLoading(true);
 
-    const { data, error } = await supabase
-      .from('citas')
-      .select(`
-        *,
-        clientes (nombres, apellidos),
-        mascotas (nombre)
-      `)
-      .order('fecha', { ascending: true })
-      .order('hora', { ascending: true });
+    try {
+      const { data, error } = await supabase
+        .from('citas')
+        .select(`
+          *,
+          clientes (nombres, apellidos),
+          mascotas (nombre)
+        `)
+        .order('fecha', { ascending: true })
+        .order('hora', { ascending: true })
+        .returns<Cita[]>(); // <--- ¡MAGIA AQUÍ! Forzamos el tipo de retorno
 
-    if (error) {
-      console.error("Error cargando citas:", error);
-    } else {
-      setCitas(data as any);
+      if (error) {
+        console.error("Error cargando citas:", error.message);
+        Alert.alert("Error", "No se pudieron cargar las citas.");
+      } else if (data) {
+        // Ahora 'data' es estrictamente de tipo Cita[], no 'any'
+        setCitas(data);
+      }
+    } catch (err) {
+      console.error("Excepción:", err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  useEffect(() => { fetchCitas(); }, [refreshTrigger]);
+  // Efecto que recarga cuando cambia el trigger global
+  useEffect(() => { fetchCitas(); }, [appointmentsTrigger]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -87,8 +110,12 @@ export default function CitasTab({ refreshTrigger }: { refreshTrigger: number })
     Alert.alert("Cancelar Cita", "¿Estás seguro de eliminar esta cita?", [
         { text: "No", style: "cancel" },
         { text: "Sí, Eliminar", style: "destructive", onPress: async () => {
-            await supabase.from('citas').delete().eq('id', id);
-            fetchCitas();
+            const { error } = await supabase.from('citas').delete().eq('id', id);
+            if (error) {
+              Alert.alert("Error", error.message);
+            } else {
+              refreshAppointments(); // Usamos el contexto para recargar
+            }
         }}
     ]);
   };
@@ -97,20 +124,18 @@ export default function CitasTab({ refreshTrigger }: { refreshTrigger: number })
     Alert.alert("Editar", "Para editar, cancela esta cita y crea una nueva.");
   };
 
-  // Abrir modal para COMPLETAR (Acción)
   const handleOpenCompleteModal = (cita: Cita) => {
     setSelectedCita(cita);
     setCompleteModalVisible(true);
   };
 
-  // Abrir modal para VER DETALLES (Lectura)
   const handleOpenDetailsModal = (cita: Cita) => {
     setSelectedCita(cita);
     setDetailsModalVisible(true);
   };
 
   const handleCompletionSuccess = () => {
-    fetchCitas();
+    refreshAppointments(); // Usamos el contexto para recargar
   };
 
   // --- RENDER ITEM ---
@@ -118,17 +143,18 @@ export default function CitasTab({ refreshTrigger }: { refreshTrigger: number })
     const isCompleted = item.estado === 'completada';
 
     return (
-      // AHORA LA TARJETA ENTERA ES TOUCHABLE SI ESTÁ COMPLETADA
       <TouchableOpacity 
         style={styles.card} 
-        activeOpacity={isCompleted ? 0.7 : 1} // Solo efecto visual si está completada
-        onPress={() => isCompleted && handleOpenDetailsModal(item)} // Abrir detalles
+        activeOpacity={isCompleted ? 0.7 : 1}
+        onPress={() => isCompleted && handleOpenDetailsModal(item)}
       >
         
-        {/* Parte Superior: Info */}
         <View style={styles.cardMain}>
             <View style={styles.dateContainer}>
-                <Text style={styles.dateText}>{item.fecha.split('-').reverse().slice(0, 2).join('/')}</Text> 
+                {/* Manejo seguro de fecha */}
+                <Text style={styles.dateText}>
+                  {item.fecha ? item.fecha.split('-').reverse().slice(0, 2).join('/') : '--/--'}
+                </Text> 
                 <Text style={[styles.timeText, isCompleted && { color: COLORES.principal }]}>
                     {item.hora}
                 </Text>
@@ -139,16 +165,16 @@ export default function CitasTab({ refreshTrigger }: { refreshTrigger: number })
             <View style={styles.infoContainer}>
                 <View style={styles.row}>
                     <MaterialCommunityIcons name="paw" size={14} color={isCompleted ? COLORES.principal : '#FFB74D'} style={{ marginRight: 4 }} />
+                    {/* Uso de Optional Chaining (?.) por seguridad */}
                     <Text style={styles.petName}>{item.mascotas?.nombre || 'Sin nombre'}</Text>
                 </View>
                 <Text style={styles.serviceText}>{item.servicio}</Text>
                 <Text style={styles.clientName}>
                     <MaterialCommunityIcons name="account" size={12} color={COLORES.textoSecundario} /> 
-                    {" "}{item.clientes?.nombres} {item.clientes?.apellidos}
+                    {" "}{item.clientes ? `${item.clientes.nombres} ${item.clientes.apellidos}` : 'Cliente desconocido'}
                 </Text>
             </View>
 
-            {/* Icono de Estado */}
             <View style={styles.statusIcon}>
                 <MaterialCommunityIcons 
                     name={isCompleted ? "check-circle" : "clock-outline"} 
@@ -158,21 +184,17 @@ export default function CitasTab({ refreshTrigger }: { refreshTrigger: number })
             </View>
         </View>
 
-        {/* Línea Separadora */}
         <View style={styles.horizontalLine} />
 
-        {/* Parte Inferior: Acciones o Estado */}
         <View style={styles.actionsContainer}>
             
             {isCompleted ? (
-                // ESTADO: COMPLETADA (Texto + Indicador visual de "Ver más")
                 <View style={styles.completedState}>
                     <MaterialCommunityIcons name="check-all" size={20} color={COLORES.principal} style={{ marginRight: 8 }} />
                     <Text style={styles.completedText}>Cita Finalizada</Text>
                     <Text style={styles.tapToViewText}>(Toca para ver detalles)</Text>
                 </View>
             ) : (
-                // ESTADO: PENDIENTE
                 <>
                     <TouchableOpacity style={styles.actionButton} onPress={() => handleEdit(item)}>
                         <MaterialCommunityIcons name="pencil-outline" size={18} color={COLORES.textoSecundario} />
@@ -224,7 +246,6 @@ export default function CitasTab({ refreshTrigger }: { refreshTrigger: number })
         />
       )}
 
-      {/* Modal de Completar (Escritura) */}
       <CompleteAppointmentModal 
          visible={completeModalVisible}
          onClose={() => setCompleteModalVisible(false)}
@@ -233,7 +254,6 @@ export default function CitasTab({ refreshTrigger }: { refreshTrigger: number })
          onSuccess={handleCompletionSuccess}
        />
 
-       {/* Modal de Detalles (Lectura) */}
        <AppointmentDetailsModal
          visible={detailsModalVisible}
          onClose={() => setDetailsModalVisible(false)}

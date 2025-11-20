@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -22,7 +22,6 @@ interface PetsListModalProps {
   onClose: () => void;
 }
 
-// Definimos el tipo de datos que esperamos de Supabase
 type PetData = {
   id: number;
   nombre: string;
@@ -32,7 +31,6 @@ type PetData = {
     nombres: string;
     apellidos: string;
   };
-  // Campo auxiliar para el filtrado
   ownerName?: string;
 };
 
@@ -40,72 +38,82 @@ export default function PetsListModal({ visible, onClose }: PetsListModalProps) 
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   
-  // Dos estados: uno para la lista completa original y otro para la filtrada
-  const [allPets, setAllPets] = useState<PetData[]>([]);
-  const [filteredPets, setFilteredPets] = useState<PetData[]>([]);
+  // Ya no necesitamos 'allPets' y 'filteredPets' por separado.
+  // Solo una lista que contiene lo que traiga la base de datos.
+  const [pets, setPets] = useState<PetData[]>([]);
 
-  // 1. Función para cargar mascotas REALES desde Supabase
-  const fetchPets = async () => {
+  // Función optimizada que recibe el término de búsqueda
+  const fetchPets = async (searchTerm: string = '') => {
     setLoading(true);
     
-    // Hacemos SELECT a 'mascotas' y traemos datos del cliente relacionado
-    const { data, error } = await supabase
-      .from('mascotas')
-      .select(`
-        id,
-        nombre,
-        raza,
-        foto_url,
-        clientes (
-          nombres,
-          apellidos
-        )
-      `)
-      .order('created_at', { ascending: false }); // Las más recientes primero
+    try {
+      // 1. Iniciamos la consulta base
+      let query = supabase
+        .from('mascotas')
+        .select(`
+          id,
+          nombre,
+          raza,
+          foto_url,
+          clientes (
+            nombres,
+            apellidos
+          )
+        `)
+        .order('created_at', { ascending: false })
+        .limit(50); // BUENA PRÁCTICA: Traer solo los primeros 50 resultados para no saturar
 
-    if (error) {
-      console.error('Error al cargar mascotas:', error);
-    } else {
-      // Procesamos los datos para facilitar el uso del nombre del dueño
-      const formattedData: PetData[] = (data || []).map((item: any) => ({
-        ...item,
-        ownerName: item.clientes 
-          ? `${item.clientes.nombres} ${item.clientes.apellidos}` 
-          : 'Sin dueño'
-      }));
+      // 2. Si hay texto, aplicamos el filtro 'ilike' (insensible a mayúsculas/minúsculas)
+      if (searchTerm.trim().length > 0) {
+        // Buscamos por nombre de mascota O raza
+        // Nota: Buscar por nombre de dueño dentro de una relación requiere lógica más compleja en Supabase,
+        // por rendimiento nos enfocamos aquí en los datos directos de la mascota.
+        query = query.or(`nombre.ilike.%${searchTerm}%,raza.ilike.%${searchTerm}%`);
+      }
 
-      setAllPets(formattedData);
-      setFilteredPets(formattedData); // Al inicio mostramos todas
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error al cargar mascotas:', error);
+      } else {
+        const formattedData: PetData[] = (data || []).map((item: any) => ({
+          ...item,
+          ownerName: item.clientes 
+            ? `${item.clientes.nombres} ${item.clientes.apellidos}` 
+            : 'Sin dueño'
+        }));
+        setPets(formattedData);
+      }
+    } catch (err) {
+      console.error("Error inesperado:", err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  // 2. Cargar datos al abrir el modal
+  // 1. Cargar datos iniciales al abrir
   useEffect(() => {
     if (visible) {
-      fetchPets();
-      setSearch(''); // Limpiamos la búsqueda anterior
+      setSearch('');
+      fetchPets(''); // Carga inicial sin filtros
     }
   }, [visible]);
 
-  // 3. Filtrado en tiempo real (Local)
+  // 2. DEBOUNCE: Efecto inteligente para la búsqueda
   useEffect(() => {
-    if (search.trim() === '') {
-      setFilteredPets(allPets);
-    } else {
-      const lowerSearch = search.toLowerCase();
-      const filtered = allPets.filter(pet => 
-        pet.nombre.toLowerCase().includes(lowerSearch) ||
-        pet.raza.toLowerCase().includes(lowerSearch) ||
-        (pet.ownerName && pet.ownerName.toLowerCase().includes(lowerSearch))
-      );
-      setFilteredPets(filtered);
-    }
-  }, [search, allPets]);
+    // Creamos un temporizador que espera 500ms antes de ejecutar la búsqueda
+    const delayDebounceFn = setTimeout(() => {
+      if (visible) {
+        fetchPets(search);
+      }
+    }, 500);
+
+    // Si el usuario sigue escribiendo antes de los 500ms, limpiamos el temporizador anterior
+    return () => clearTimeout(delayDebounceFn);
+  }, [search, visible]);
 
   const renderItem = ({ item }: { item: PetData }) => (
     <TouchableOpacity style={styles.petCard} activeOpacity={0.7}>
-      {/* Avatar: Si tiene foto la muestra, si no, icono por defecto */}
       <View style={styles.avatarContainer}>
         {item.foto_url ? (
           <Image source={{ uri: item.foto_url }} style={styles.petImage} />
@@ -157,10 +165,10 @@ export default function PetsListModal({ visible, onClose }: PetsListModalProps) 
           <MaterialCommunityIcons name="magnify" size={24} color={COLORES.textoSecundario} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Buscar nombre, raza o dueño..."
+            placeholder="Buscar nombre o raza..." // Actualizado para reflejar el filtro real
             placeholderTextColor="#999"
             value={search}
-            onChangeText={setSearch}
+            onChangeText={setSearch} // Solo actualiza el estado, el useEffect maneja la llamada API
           />
           {search.length > 0 && (
             <TouchableOpacity onPress={() => setSearch('')}>
@@ -174,7 +182,7 @@ export default function PetsListModal({ visible, onClose }: PetsListModalProps) 
           <ActivityIndicator size="large" color={COLORES.principal} style={{ marginTop: 40 }} />
         ) : (
           <FlatList
-            data={filteredPets}
+            data={pets}
             keyExtractor={(item) => item.id.toString()}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
@@ -184,7 +192,7 @@ export default function PetsListModal({ visible, onClose }: PetsListModalProps) 
                 <MaterialCommunityIcons name="paw-off" size={50} color={COLORES.inactivo} />
                 <Text style={styles.emptyText}>No hay mascotas encontradas.</Text>
                 <Text style={styles.emptySubText}>
-                  Prueba con otro nombre o registra una nueva.
+                  Intenta con otro término.
                 </Text>
               </View>
             }
@@ -226,20 +234,17 @@ const styles = StyleSheet.create({
   
   listContent: { paddingBottom: 10 },
   
-  // Empty State
   emptyState: { alignItems: 'center', marginTop: 40, paddingHorizontal: 20 },
   emptyText: { fontSize: 16, fontWeight: 'bold', color: COLORES.textoSecundario, marginTop: 15 },
   emptySubText: { 
     fontSize: 13, color: '#999', textAlign: 'center', marginTop: 5 
   },
 
-  // Pet Card
   petCard: {
     flexDirection: 'row', alignItems: 'center',
     padding: 12, marginBottom: 10,
     backgroundColor: '#FFF', borderRadius: 12,
     borderWidth: 1, borderColor: '#F0F0F0',
-    // Sombra suave
     shadowColor: '#000', shadowOpacity: 0.03, shadowOffset: {width:0, height:2}, elevation: 1
   },
   avatarContainer: { marginRight: 12 },

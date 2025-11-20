@@ -12,15 +12,17 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { COLORES } from '../../constants/colors';
-// Importamos el Modal y el tipo Cliente
 import ClientDetailsModal, { Cliente } from '../modals/ClientDetailsModal';
+import { useData } from '../../context/DataContext'; // Importamos hook
 
-export default function ClientesTab({ refreshTrigger }: { refreshTrigger: number }) {
+export default function ClientesTab() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   
-  // Estados para el Modal de Detalle
+  // Consumimos el trigger del contexto
+  const { clientsTrigger, refreshClients } = useData();
+  
   const [selectedClient, setSelectedClient] = useState<Cliente | null>(null);
   const [detailsVisible, setDetailsVisible] = useState(false);
 
@@ -38,9 +40,10 @@ export default function ClientesTab({ refreshTrigger }: { refreshTrigger: number
     setLoading(false);
   };
 
+  // Se ejecuta cada vez que clientsTrigger cambia (desde el modal o el dashboard)
   useEffect(() => {
     fetchClientes();
-  }, [refreshTrigger]);
+  }, [clientsTrigger]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -48,7 +51,6 @@ export default function ClientesTab({ refreshTrigger }: { refreshTrigger: number
     setRefreshing(false);
   }, []);
 
-  // --- ESTA ES LA FUNCIÓN QUE TE FALTABA ---
   const deleteClient = async (id: number) => {
     const { error } = await supabase
       .from('clientes')
@@ -58,11 +60,9 @@ export default function ClientesTab({ refreshTrigger }: { refreshTrigger: number
     if (error) {
       Alert.alert("Error", "No se pudo eliminar al cliente: " + error.message);
     } else {
-      // Recargamos la lista para que desaparezca el eliminado
-      fetchClientes();
+      refreshClients(); // Usamos la función del contexto para recargar
     }
   };
-  // -----------------------------------------
 
   const handlePressClient = (cliente: Cliente) => {
     setSelectedClient(cliente);
@@ -123,7 +123,6 @@ export default function ClientesTab({ refreshTrigger }: { refreshTrigger: number
         />
       )}
 
-      {/* Modal de Detalle: AHORA SÍ PASAMOS LA FUNCIÓN onDelete */}
       <ClientDetailsModal 
         visible={detailsVisible} 
         cliente={selectedClient} 

@@ -16,6 +16,9 @@ import AddClientModal from '../components/modals/AddClientModal';
 import PetsListModal from '../components/modals/PetsListModal';
 import AddAppointmentModal from '../components/modals/AddAppointmentModal';
 
+// Hook del Contexto
+import { useData } from '../context/DataContext';
+
 type TabType = 'Home' | 'Citas' | 'Clientes' | 'Perfil';
 
 export default function DashboardScreen() {
@@ -26,9 +29,8 @@ export default function DashboardScreen() {
   const [appointmentModalVisible, setAppointmentModalVisible] = useState(false);
   const [petsModalVisible, setPetsModalVisible] = useState(false);
   
-  // Triggers de Refresco (Gatillos)
-  const [clientesRefreshTrigger, setClientesRefreshTrigger] = useState(0);
-  const [citasRefreshTrigger, setCitasRefreshTrigger] = useState(0); // <--- NUEVO
+  // Usamos el contexto en lugar de estados locales para los triggers
+  const { refreshClients, refreshAppointments } = useData();
 
   // Lógica del Botón Central
   const handleMainButtonClick = () => {
@@ -37,28 +39,26 @@ export default function DashboardScreen() {
     } else if (activeTab === 'Citas') {
       setAppointmentModalVisible(true);
     } else {
+      // Opcional: Podrías abrir un menú general aquí si estás en Home
       console.log("Botón inactivo en esta pantalla");
     }
   };
 
   const handleClientAdded = () => {
-    setClientesRefreshTrigger(prev => prev + 1); 
+    refreshClients(); // Actualiza la lista globalmente
     setActiveTab('Clientes'); 
   };
 
-  // <--- NUEVA FUNCIÓN: Refrescar citas al agregar
   const handleAppointmentAdded = () => {
-    setCitasRefreshTrigger(prev => prev + 1);
+    refreshAppointments(); // Actualiza la lista globalmente
     setActiveTab('Citas');
   };
 
   const renderContent = () => {
     switch (activeTab) {
       case 'Home': return <HomeTab />;
-      case 'Citas': 
-        // <--- Pasamos el trigger aquí
-        return <CitasTab refreshTrigger={citasRefreshTrigger} />;
-      case 'Clientes': return <ClientesTab refreshTrigger={clientesRefreshTrigger} />;
+      case 'Citas': return <CitasTab />; // Ya no necesita props
+      case 'Clientes': return <ClientesTab />; // Ya no necesita props
       case 'Perfil': return <PerfilTab />;
       default: return <HomeTab />;
     }
@@ -88,7 +88,7 @@ export default function DashboardScreen() {
       <AddAppointmentModal
         visible={appointmentModalVisible}
         onClose={() => setAppointmentModalVisible(false)}
-        onAppointmentAdded={handleAppointmentAdded} // <--- Conectamos la función
+        onAppointmentAdded={handleAppointmentAdded}
       />
 
       <PetsListModal
