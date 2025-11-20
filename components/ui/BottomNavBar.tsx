@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -7,10 +7,13 @@ import {
   Platform, 
   Animated, 
   TouchableWithoutFeedback,
-  Alert 
+  Alert,
+  Dimensions // Importamos Dimensions para mejorar el overlay
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORES } from '../../constants/colors';
+
+const { height } = Dimensions.get('window');
 
 type TabType = 'Home' | 'Citas' | 'Clientes' | 'Perfil';
 
@@ -28,12 +31,11 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
   // Determinar si el botón central tiene acción de "Click Corto"
   const isMainActionEnabled = activeTab === 'Clientes' || activeTab === 'Citas';
 
-  // Cambiar icono según el contexto (Opcional, pero ayuda mucho a la UX)
   const getMainIcon = () => {
-    if (menuOpen) return "close"; // Si el menú está abierto, mostrar X
+    if (menuOpen) return "close"; 
     if (activeTab === 'Clientes') return "account-plus";
     if (activeTab === 'Citas') return "calendar-plus";
-    return "plus"; // Por defecto en Home/Perfil
+    return "plus"; 
   };
 
   const toggleMenu = () => {
@@ -68,7 +70,10 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
     return (
       <TouchableOpacity 
         style={styles.tabItem} 
-        onPress={() => onTabChange(tabName)}
+        onPress={() => {
+            if(menuOpen) toggleMenu(); // Si el menú está abierto, cerrar al cambiar de tab
+            onTabChange(tabName);
+        }}
         activeOpacity={0.7}
       >
         <MaterialCommunityIcons 
@@ -85,7 +90,12 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
     <View style={styles.bottomBarContainer} pointerEvents="box-none">
       
       {/* --- MENÚ DESPLEGABLE --- */}
-      <Animated.View style={[styles.menuOption, getAnimatedStyle(3)]}>
+      {/* AQUI ESTA LA CORRECCION: pointerEvents */}
+      
+      <Animated.View 
+        style={[styles.menuOption, getAnimatedStyle(3)]}
+        pointerEvents={menuOpen ? 'auto' : 'none'} 
+      >
         <TouchableOpacity style={styles.optionButton} onPress={() => { toggleMenu(); Alert.alert("Info", "Función global futura"); }}>
           <Text style={styles.optionLabel}>Opciones Globales</Text>
           <View style={styles.optionIcon}>
@@ -94,7 +104,10 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
         </TouchableOpacity>
       </Animated.View>
 
-      <Animated.View style={[styles.menuOption, getAnimatedStyle(2)]}>
+      <Animated.View 
+        style={[styles.menuOption, getAnimatedStyle(2)]}
+        pointerEvents={menuOpen ? 'auto' : 'none'}
+      >
         <TouchableOpacity style={styles.optionButton} onPress={() => { toggleMenu(); onPetsClick(); }}>
           <Text style={styles.optionLabel}>Buscar Mascotas</Text>
           <View style={styles.optionIcon}>
@@ -103,7 +116,10 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
         </TouchableOpacity>
       </Animated.View>
 
-      <Animated.View style={[styles.menuOption, getAnimatedStyle(1)]}>
+      <Animated.View 
+        style={[styles.menuOption, getAnimatedStyle(1)]}
+        pointerEvents={menuOpen ? 'auto' : 'none'}
+      >
         <TouchableOpacity style={styles.optionButton} onPress={() => { toggleMenu(); Alert.alert("Foto", "Subir foto rápida"); }}>
           <Text style={styles.optionLabel}>Subir Foto</Text>
           <View style={styles.optionIcon}>
@@ -126,15 +142,16 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
         style={[
             styles.floatingButton, 
             menuOpen && styles.floatingButtonActive,
-            // Si no hay acción habilitada, cambiamos ligeramente el estilo (opcional)
             !isMainActionEnabled && !menuOpen && { opacity: 0.9 } 
         ]} 
         onPress={() => {
-            // Solo ejecuta la acción si está habilitada (Clientes o Citas) O si el menú está abierto (para cerrarlo)
             if (menuOpen) {
                 toggleMenu();
             } else if (isMainActionEnabled) {
                 onAddClick();
+            } else {
+                // Si no hay acción directa (Home/Perfil), abrimos el menú como fallback
+                toggleMenu();
             }
         }}      
         onLongPress={toggleMenu}  
@@ -145,11 +162,10 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
             transform: [{ 
                 rotate: animation.interpolate({ 
                     inputRange: [0, 1], 
-                    outputRange: ['0deg', '90deg'] // Rotamos más para efecto visual
+                    outputRange: ['0deg', '135deg'] // Rotación ajustada para que la + se convierta en x
                 }) 
             }] 
         }}>
-          {/* Cambiamos el icono dinámicamente */}
           <MaterialCommunityIcons 
             name={getMainIcon() as any} 
             size={28} 
@@ -158,9 +174,10 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
         </Animated.View>
       </TouchableOpacity>
 
+      {/* Overlay mejorado */}
       {menuOpen && (
         <TouchableWithoutFeedback onPress={toggleMenu}>
-           <View style={styles.overlay} pointerEvents="auto" />
+           <View style={styles.overlay} />
         </TouchableWithoutFeedback>
       )}
     </View>
@@ -191,7 +208,7 @@ const styles = StyleSheet.create({
     zIndex: 102
   },
   floatingButtonActive: {
-    backgroundColor: COLORES.danger, // Cambia a rojo al abrir menú para indicar "cerrar"
+    backgroundColor: COLORES.danger,
     borderColor: COLORES.fondoBlanco
   },
   menuOption: { position: 'absolute', bottom: 30, zIndex: 101 },
@@ -206,5 +223,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 2, elevation: 4
   },
-  overlay: { position: 'absolute', top: -1000, left: 0, right: 0, bottom: 0, zIndex: 90 }
+  // Overlay ajustado para cubrir toda la pantalla de forma segura
+  overlay: { 
+    position: 'absolute', 
+    bottom: 0, 
+    left: 0, 
+    right: 0, 
+    height: height, // Usa la altura de la pantalla
+    width: '100%',
+    backgroundColor: 'rgba(0,0,0,0.3)', // Un poco oscuro para enfoque
+    zIndex: 90 
+  }
 });
