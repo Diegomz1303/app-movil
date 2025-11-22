@@ -15,7 +15,7 @@ import { COLORES } from '../../constants/colors';
 
 // Contextos
 import { useData } from '../../context/DataContext';
-import { useTheme } from '../../context/ThemeContext'; // <--- 1. Importar ThemeContext
+import { useTheme } from '../../context/ThemeContext';
 
 // Modales
 import CompleteAppointmentModal from '../modals/CompleteAppointmentModal'; 
@@ -47,7 +47,7 @@ export default function CitasTab() {
   const [refreshing, setRefreshing] = useState(false);
 
   const { appointmentsTrigger, refreshAppointments } = useData();
-  const { theme } = useTheme(); // <--- 2. Usar el tema
+  const { theme } = useTheme();
 
   const [completeModalVisible, setCompleteModalVisible] = useState(false);
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
@@ -64,6 +64,9 @@ export default function CitasTab() {
           clientes (nombres, apellidos),
           mascotas (nombre)
         `)
+        // --- FILTRO NUEVO: Ocultar las completadas (se van a ServiciosTab) ---
+        .neq('estado', 'completada') 
+        // ---------------------------------------------------------------------
         .order('fecha', { ascending: true })
         .order('hora', { ascending: true })
         .returns<Cita[]>();
@@ -122,7 +125,6 @@ export default function CitasTab() {
 
     return (
       <TouchableOpacity 
-        // 3. Fondo de tarjeta dinámico
         style={[styles.card, { backgroundColor: theme.card }]} 
         activeOpacity={isCompleted ? 0.7 : 1}
         onPress={() => isCompleted && handleOpenDetailsModal(item)}
@@ -130,7 +132,6 @@ export default function CitasTab() {
         
         <View style={styles.cardMain}>
             <View style={styles.dateContainer}>
-                {/* Textos con color del tema */}
                 <Text style={[styles.dateText, { color: theme.textSecondary }]}>
                   {item.fecha ? item.fecha.split('-').reverse().slice(0, 2).join('/') : '--/--'}
                 </Text> 
@@ -139,7 +140,6 @@ export default function CitasTab() {
                 </Text>
             </View>
 
-            {/* Divisor dinámico */}
             <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
             <View style={styles.infoContainer}>
@@ -165,7 +165,6 @@ export default function CitasTab() {
 
         <View style={[styles.horizontalLine, { backgroundColor: theme.border }]} />
 
-        {/* Fondo de acciones dinámico */}
         <View style={[styles.actionsContainer, { backgroundColor: theme.inputBackground }]}>
             
             {isCompleted ? (
@@ -199,11 +198,10 @@ export default function CitasTab() {
   };
 
   return (
-    // 4. Fondo transparente para ver el patrón
     <View style={[styles.container, { backgroundColor: 'transparent' }]}>
       <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.text }]}>Mis Citas</Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Próximas atenciones programadas</Text>
+        <Text style={[styles.title, { color: theme.text }]}>Agenda</Text>
+        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Próximas atenciones pendientes</Text>
       </View>
 
       {loading && !refreshing ? (
@@ -250,7 +248,7 @@ export default function CitasTab() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 }, // Sin color de fondo fijo
+  container: { flex: 1 }, 
   header: { paddingHorizontal: 20, paddingTop: 50, paddingBottom: 10 },
   title: { fontSize: 28, fontWeight: 'bold' },
   subtitle: { fontSize: 14 },

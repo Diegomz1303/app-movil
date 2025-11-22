@@ -33,13 +33,16 @@ interface AddAppointmentModalProps {
   onAppointmentAdded?: () => void;
 }
 
+// LISTA DE SERVICIOS PET SHOP
 const SERVICIOS = [
-  'BAÑO',
+  'BAÑO COMPLETO',
   'BAÑO Y CORTE',
-  'SERVICIO DE COLORIMETRÍA',
+  'CORTE HIGIÉNICO',
+  'DESLANADO',
   'CORTE DE UÑAS',
-  'DESPARASITACIÓN',
-  'CONSULTA VETERINARIA'
+  'LIMPIEZA DE OÍDOS',
+  'BAÑO ANTIPULGAS',
+  'SPA MASCOTA'
 ];
 
 const HORARIOS = [

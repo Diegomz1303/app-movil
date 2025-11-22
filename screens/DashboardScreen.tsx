@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, View, SafeAreaView, StatusBar, ImageBackground } from 'react-native';
 import { COLORES } from '../constants/colors';
-// 1. Importamos la librería de animación
 import * as Animatable from 'react-native-animatable';
 
 // Componentes de Pantallas
@@ -9,6 +8,8 @@ import HomeTab from '../components/dashboard/HomeTab';
 import CitasTab from '../components/dashboard/CitasTab';
 import ClientesTab from '../components/dashboard/ClientesTab';
 import PerfilTab from '../components/dashboard/PerfilTab';
+import TiendaTab from '../components/dashboard/TiendaTab';     // <--- Importar Tienda
+import ServiciosTab from '../components/dashboard/ServiciosTab'; // <--- Importar Servicios
 
 // Componentes UI
 import BottomNavBar from '../components/ui/BottomNavBar';
@@ -23,7 +24,8 @@ import ReportsModal from '../components/modals/ReportsModal';
 import { useData } from '../context/DataContext';
 import { useTheme } from '../context/ThemeContext';
 
-type TabType = 'Home' | 'Citas' | 'Clientes' | 'Perfil';
+// DEFINICIÓN DE TABS ACTUALIZADA
+type TabType = 'Home' | 'Citas' | 'Clientes' | 'Tienda' | 'Perfil' | 'Servicios';
 
 export default function DashboardScreen() {
   const [activeTab, setActiveTab] = useState<TabType>('Home');
@@ -43,7 +45,8 @@ export default function DashboardScreen() {
     } else if (activeTab === 'Citas') {
       setAppointmentModalVisible(true);
     } else {
-      console.log("Botón inactivo en esta pantalla");
+      // Por defecto, si está en otra pestaña, abre agendar cita
+      setAppointmentModalVisible(true);
     }
   };
 
@@ -57,7 +60,6 @@ export default function DashboardScreen() {
     setActiveTab('Citas');
   };
 
-  // --- 2. MODIFICAMOS LA LÓGICA DE RENDERIZADO ---
   const renderContent = () => {
     let contentComponent;
 
@@ -65,19 +67,19 @@ export default function DashboardScreen() {
       case 'Home': contentComponent = <HomeTab />; break;
       case 'Citas': contentComponent = <CitasTab />; break;
       case 'Clientes': contentComponent = <ClientesTab />; break;
+      case 'Tienda': contentComponent = <TiendaTab />; break;       // <--- Nuevo Tab
       case 'Perfil': contentComponent = <PerfilTab />; break;
+      case 'Servicios': contentComponent = <ServiciosTab />; break; // <--- Nuevo Tab
       default: contentComponent = <HomeTab />; break;
     }
 
-    // Envolvemos el componente en una vista animada
-    // key={activeTab} es CRUCIAL: obliga a reiniciar la animación al cambiar de tab
     return (
       <Animatable.View
-        key={activeTab} // Identificador único para reiniciar animación
-        animation="fadeInUp" // Tipo de animación (puedes probar: fadeIn, zoomIn, slideInRight)
-        duration={500} // Duración en milisegundos (0.5 segundos)
-        style={{ flex: 1 }} // Ocupar todo el espacio
-        useNativeDriver={true} // Para mejor rendimiento
+        key={activeTab} 
+        animation="fadeInUp" 
+        duration={300} 
+        style={{ flex: 1 }} 
+        useNativeDriver={true} 
       >
         {contentComponent}
       </Animatable.View>
@@ -101,7 +103,6 @@ export default function DashboardScreen() {
         }}
       >
         <View style={styles.mainContainer}>
-          {/* Aquí se renderiza el contenido animado */}
           {renderContent()}
         </View>
       </ImageBackground>

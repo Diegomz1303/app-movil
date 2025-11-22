@@ -9,11 +9,10 @@ import {
   RefreshControl 
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { LineChart } from 'react-native-chart-kit';
+import { BarChart } from 'react-native-chart-kit'; // Cambiado a BarChart
 import { supabase } from '../../lib/supabase';
 import { COLORES } from '../../constants/colors';
 import { useData } from '../../context/DataContext';
-// 1. Importar hook de tema
 import { useTheme } from '../../context/ThemeContext';
 
 const screenWidth = Dimensions.get("window").width;
@@ -22,56 +21,85 @@ export default function HomeTab() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   
-  const [totalIngresos, setTotalIngresos] = useState(0);
+  // Estados Servicios (Citas)
+  const [ingresosServicios, setIngresosServicios] = useState(0);
   const [totalCitas, setTotalCitas] = useState(0);
   const [totalClientes, setTotalClientes] = useState(0);
-  
   const [chartLabels, setChartLabels] = useState<string[]>([]);
-  const [chartValues, setChartValues] = useState<number[]>([]);
+  const [citasChartValues, setCitasChartValues] = useState<number[]>([]);
+
+  // Estados Ventas (Productos)
+  const [ingresosVentas, setIngresosVentas] = useState(0);
+  const [totalVentas, setTotalVentas] = useState(0);
+  const [ventasChartValues, setVentasChartValues] = useState<number[]>([]);
+
   const [chartReady, setChartReady] = useState(false);
 
   const { appointmentsTrigger, clientsTrigger } = useData();
-  // 2. Usar tema y modo oscuro
   const { theme, isDark } = useTheme();
 
-  const procesarDatos = useCallback((citas: any[], numClientes: number) => {
+  const procesarDatos = useCallback((citas: any[], ventas: any[], numClientes: number) => {
     const hoy = new Date();
     
+    // --- 1. Procesar Totales Generales ---
     setTotalClientes(numClientes);
     setTotalCitas(citas.length);
+    setTotalVentas(ventas.length);
 
-    const ingresos = citas
+    // Sumar Ingresos Servicios
+    const totalServ = citas
       .filter(c => c.estado === 'completada')
       .reduce((acc, curr) => acc + (Number(curr.precio) || 0), 0);
-    setTotalIngresos(ingresos);
+    setIngresosServicios(totalServ);
 
-    const meses: { [key: string]: number } = {};
+    // Sumar Ingresos Ventas
+    const totalProd = ventas
+      .reduce((acc, curr) => acc + (Number(curr.total) || 0), 0);
+    setIngresosVentas(totalProd);
+
+    // --- 2. Procesar Gráficos (Últimos 6 meses) ---
+    const meses: { [key: string]: { citas: number, ventas: number } } = {};
     const etiquetas: string[] = [];
-    const valores: number[] = [];
+    const valoresCitas: number[] = [];
+    const valoresVentas: number[] = [];
 
+    // Inicializar últimos 6 meses
     for (let i = 5; i >= 0; i--) {
       const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
       const nombreMes = d.toLocaleString('es-ES', { month: 'short' }); 
+      // Clave YYYY-MM para agrupar
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       
-      meses[key] = 0;
-      etiquetas.push(nombreMes);
+      meses[key] = { citas: 0, ventas: 0 };
+      etiquetas.push(nombreMes); // Ej: "jun", "jul"
     }
 
+    // Contar Citas por mes
     citas.forEach(cita => {
       if (cita.fecha) {
-        const key = cita.fecha.substring(0, 7);
-        if (meses[key] !== undefined) {
-          meses[key] += 1;
-        }
+        const key = cita.fecha.substring(0, 7); // YYYY-MM
+        if (meses[key]) meses[key].citas += 1;
       }
     });
 
+    // Contar Ventas por mes
+    ventas.forEach(venta => {
+      if (venta.fecha) {
+        const key = venta.fecha.substring(0, 7); // YYYY-MM
+        if (meses[key]) meses[key].ventas += 1;
+      }
+    });
+
+    // Extraer valores ordenados
     const keysOrdenadas = Object.keys(meses).sort();
-    keysOrdenadas.forEach(k => valores.push(meses[k]));
+    keysOrdenadas.forEach(k => {
+        valoresCitas.push(meses[k].citas);
+        valoresVentas.push(meses[k].ventas);
+    });
 
     setChartLabels(etiquetas);
-    setChartValues(valores);
+    setCitasChartValues(valoresCitas);
+    setVentasChartValues(valoresVentas);
     setChartReady(true);
   }, []);
 
@@ -80,15 +108,18 @@ export default function HomeTab() {
     setChartReady(false); 
     
     try {
-      const [responseCitas, responseClientes] = await Promise.all([
+      // Traemos Citas, Clientes y Ventas en paralelo
+      const [resCitas, resClientes, resVentas] = await Promise.all([
         supabase.from('citas').select('fecha, precio, estado'),
-        supabase.from('clientes').select('*', { count: 'exact', head: true })
+        supabase.from('clientes').select('*', { count: 'exact', head: true }),
+        supabase.from('ventas').select('fecha, total') // Asumiendo que creaste la tabla ventas
       ]);
 
-      const citasData = responseCitas.data || [];
-      const clientesCount = responseClientes.count || 0;
+      const citasData = resCitas.data || [];
+      const ventasData = resVentas.data || [];
+      const clientesCount = resClientes.count || 0;
 
-      procesarDatos(citasData, clientesCount);
+      procesarDatos(citasData, ventasData, clientesCount);
 
     } catch (e) {
       console.error("Error cargando datos:", e);
@@ -107,22 +138,47 @@ export default function HomeTab() {
     fetchData();
   }, []);
 
-  const StatCard = React.memo(({ icon, title, value, color }: any) => (
-    // 3. Fondo de tarjeta dinámico
-    <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+  const StatCard = React.memo(({ icon, title, value, color, fullWidth }: any) => (
+    <View style={[styles.statCard, { backgroundColor: theme.card, width: fullWidth ? '100%' : '48%' }]}>
       <View style={[styles.iconBox, { backgroundColor: color }]}>
         <MaterialCommunityIcons name={icon} size={24} color="white" />
       </View>
       <View>
-        {/* Textos dinámicos */}
         <Text style={[styles.statValue, { color: theme.text }]}>{value}</Text>
         <Text style={[styles.statTitle, { color: theme.textSecondary }]}>{title}</Text>
       </View>
     </View>
   ));
 
+  const renderBarChart = (dataValues: number[], barColor: string) => (
+    <BarChart
+        data={{
+            labels: chartLabels,
+            datasets: [{ data: dataValues }]
+        }}
+        width={screenWidth - 40}
+        height={220}
+        yAxisLabel=""
+        yAxisSuffix=""
+        fromZero
+        chartConfig={{
+            backgroundColor: theme.card,
+            backgroundGradientFrom: theme.card,
+            backgroundGradientTo: theme.card,
+            decimalPlaces: 0,
+            // Color de las barras
+            color: (opacity = 1) => barColor, 
+            // Color de las etiquetas (ejes)
+            labelColor: (opacity = 1) => isDark ? `rgba(255, 255, 255, ${opacity})` : `rgba(0, 0, 0, ${opacity})`,
+            barPercentage: 0.7,
+            style: { borderRadius: 16 },
+        }}
+        style={{ marginVertical: 8, borderRadius: 16 }}
+        showValuesOnTopOfBars={true} // Muestra el número arriba de la barra
+    />
+  );
+
   return (
-    // 4. Fondo transparente para ver el patrón
     <ScrollView 
       style={[styles.container, { backgroundColor: 'transparent' }]} 
       showsVerticalScrollIndicator={false}
@@ -137,82 +193,80 @@ export default function HomeTab() {
         <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 50 }} />
       ) : (
         <>
-          <View style={styles.statsContainer}>
-            <StatCard 
-              icon="cash-multiple" 
-              title="Ingresos Totales" 
-              value={`S/. ${totalIngresos.toFixed(2)}`} 
-              color={theme.primary} 
-            />
-            <View style={{ height: 10 }} />
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <View style={{ width: '48%' }}>
-                 <StatCard 
-                    icon="calendar-check" 
-                    title="Citas Totales" 
-                    value={totalCitas} 
-                    color="#FFB74D" 
-                  />
-              </View>
-              <View style={{ width: '48%' }}>
-                 <StatCard 
-                    icon="account-group" 
-                    title="Clientes" 
-                    value={totalClientes} 
-                    color="#4FC3F7" 
-                  />
-              </View>
-            </View>
-          </View>
-
-          {/* 5. Contenedor del gráfico dinámico */}
-          <View style={[styles.chartContainer, { backgroundColor: theme.card }]}>
-            <View style={styles.chartHeader}>
-               <MaterialCommunityIcons name="chart-line" size={20} color={theme.text} />
-               <Text style={[styles.chartTitle, { color: theme.text }]}>Citas de los últimos 6 meses</Text>
-            </View>
+          {/* ================= SECCIÓN SERVICIOS ================= */}
+          <View style={styles.sectionContainer}>
+            <Text style={[styles.sectionHeader, { color: theme.text }]}>Servicios & Citas</Text>
             
-            {chartReady && chartValues.length > 0 ? (
-              <LineChart
-                data={{
-                  labels: chartLabels,
-                  datasets: [{ data: chartValues }]
-                }}
-                width={screenWidth - 40}
-                height={220}
-                yAxisLabel=""
-                yAxisSuffix=""
-                fromZero
-                chartConfig={{
-                  // 6. Colores del gráfico dinámicos
-                  backgroundColor: theme.card,
-                  backgroundGradientFrom: theme.card,
-                  backgroundGradientTo: theme.card,
-                  decimalPlaces: 0,
-                  color: (opacity = 1) => isDark ? `rgba(76, 175, 80, ${opacity})` : `rgba(76, 175, 80, ${opacity})`, // Verde siempre
-                  labelColor: (opacity = 1) => isDark ? `rgba(255, 255, 255, ${opacity})` : `rgba(0, 0, 0, ${opacity})`, // Texto blanco en dark mode
-                  style: { borderRadius: 16 },
-                  propsForDots: { r: "4", strokeWidth: "2", stroke: COLORES.principalDark }
-                }}
-                style={{ marginVertical: 8, borderRadius: 16 }}
-                withInnerLines={true}
-                withOuterLines={true}
-              />
-            ) : (
-               <View style={{height: 220, justifyContent: 'center', alignItems: 'center'}}>
-                  <ActivityIndicator color={theme.primary} />
-               </View>
-            )}
+            <View style={styles.statsContainer}>
+                <StatCard 
+                    icon="cash-multiple" 
+                    title="Ingresos Servicios" 
+                    value={`S/. ${ingresosServicios.toFixed(2)}`} 
+                    color={theme.primary} 
+                    fullWidth
+                />
+                <View style={{ height: 10 }} />
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <StatCard icon="calendar-check" title="Citas Realizadas" value={totalCitas} color="#FFB74D" />
+                    <StatCard icon="account-group" title="Clientes Totales" value={totalClientes} color="#4FC3F7" />
+                </View>
+            </View>
+
+            {/* Gráfico de Barras SERVICIOS */}
+            <View style={[styles.chartContainer, { backgroundColor: theme.card }]}>
+                <View style={styles.chartHeader}>
+                    <MaterialCommunityIcons name="chart-bar" size={20} color={theme.text} />
+                    <Text style={[styles.chartTitle, { color: theme.text }]}>Citas (Últimos 6 meses)</Text>
+                </View>
+                
+                {chartReady ? renderBarChart(citasChartValues, isDark ? `rgba(76, 175, 80, 1)` : `rgba(76, 175, 80, 1)`) : (
+                    <ActivityIndicator color={theme.primary} style={{ height: 220 }} />
+                )}
+            </View>
           </View>
 
-          {/* 7. Banner Info dinámico */}
-          <View style={[
-              styles.infoBanner, 
-              { backgroundColor: isDark ? '#37474F' : '#FFF9C4' } // Amarillo suave en light, Gris azulado en dark
-            ]}>
+          {/* Divisor visual */}
+          <View style={{ height: 1, backgroundColor: theme.border, marginVertical: 10, marginHorizontal: 20 }} />
+
+          {/* ================= SECCIÓN VENTAS (PRODUCTOS) ================= */}
+          <View style={styles.sectionContainer}>
+            <Text style={[styles.sectionHeader, { color: theme.text }]}>Ventas de Tienda</Text>
+            
+            <View style={styles.statsContainer}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <StatCard 
+                        icon="shopping" 
+                        title="Ventas Totales" 
+                        value={`S/. ${ingresosVentas.toFixed(2)}`} 
+                        color="#FF7043" 
+                    />
+                    <StatCard 
+                        icon="receipt" 
+                        title="Transacciones" 
+                        value={totalVentas} 
+                        color="#AB47BC" 
+                    />
+                </View>
+            </View>
+
+            {/* Gráfico de Barras VENTAS */}
+            <View style={[styles.chartContainer, { backgroundColor: theme.card }]}>
+                <View style={styles.chartHeader}>
+                    <MaterialCommunityIcons name="chart-bar" size={20} color={theme.text} />
+                    <Text style={[styles.chartTitle, { color: theme.text }]}>Ventas (Últimos 6 meses)</Text>
+                </View>
+                
+                {chartReady ? renderBarChart(ventasChartValues, `rgba(255, 112, 67, 1)`) : (
+                    <ActivityIndicator color={theme.primary} style={{ height: 220 }} />
+                )}
+            </View>
+          </View>
+
+          {/* Banner Info */}
+          <View style={[styles.infoBanner, { backgroundColor: isDark ? '#37474F' : '#FFF9C4' }]}>
              <MaterialCommunityIcons name="lightbulb-on-outline" size={24} color={isDark ? '#FFD54F' : '#555'} />
              <Text style={[styles.infoText, { color: isDark ? '#ECEFF1' : '#666' }]}>
-                Recuerda registrar los pagos al completar una cita para ver tus ingresos reflejados aquí.
+                Recuerda: Los gráficos muestran la cantidad de operaciones realizadas cada mes.
              </Text>
           </View>
           
@@ -224,12 +278,15 @@ export default function HomeTab() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 }, // Quitamos color fijo
-  header: { paddingHorizontal: 20, paddingTop: 40, paddingBottom: 20 },
+  container: { flex: 1 },
+  header: { paddingHorizontal: 20, paddingTop: 40, paddingBottom: 10 },
   welcomeText: { fontSize: 28, fontWeight: 'bold' },
   dateText: { fontSize: 14, marginTop: 5 },
   
-  statsContainer: { paddingHorizontal: 20, marginBottom: 20 },
+  sectionContainer: { marginBottom: 20 },
+  sectionHeader: { fontSize: 18, fontWeight: 'bold', marginHorizontal: 20, marginBottom: 10, marginTop: 10 },
+
+  statsContainer: { paddingHorizontal: 20, marginBottom: 15 },
   statCard: {
     borderRadius: 16, padding: 15,
     flexDirection: 'row', alignItems: 'center',
@@ -238,7 +295,7 @@ const styles = StyleSheet.create({
   iconBox: {
     width: 45, height: 45, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15
   },
-  statValue: { fontSize: 20, fontWeight: 'bold' },
+  statValue: { fontSize: 18, fontWeight: 'bold' }, // Ajustado un poco el tamaño
   statTitle: { fontSize: 12 },
 
   chartContainer: {
@@ -246,8 +303,8 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
     alignItems: 'center'
   },
-  chartHeader: { flexDirection: 'row', alignSelf: 'flex-start', marginBottom: 10, alignItems: 'center', gap: 8 },
-  chartTitle: { fontSize: 16, fontWeight: 'bold' },
+  chartHeader: { flexDirection: 'row', alignSelf: 'flex-start', marginBottom: 5, alignItems: 'center', gap: 8 },
+  chartTitle: { fontSize: 14, fontWeight: 'bold' },
 
   infoBanner: {
     margin: 20, padding: 15, borderRadius: 12,

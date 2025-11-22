@@ -1,14 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  StyleSheet, 
-  Platform, 
-  Animated, 
-  TouchableWithoutFeedback,
-  Alert,
-  Dimensions 
+  View, Text, TouchableOpacity, StyleSheet, Platform, Animated, 
+  TouchableWithoutFeedback, Dimensions 
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORES } from '../../constants/colors';
@@ -16,7 +9,7 @@ import { useTheme } from '../../context/ThemeContext';
 
 const { height } = Dimensions.get('window');
 
-type TabType = 'Home' | 'Citas' | 'Clientes' | 'Perfil';
+type TabType = 'Home' | 'Citas' | 'Clientes' | 'Tienda' | 'Perfil' | 'Servicios';
 
 interface BottomNavBarProps {
   activeTab: TabType;
@@ -30,8 +23,6 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
   const [menuOpen, setMenuOpen] = useState(false);
   const animation = useRef(new Animated.Value(0)).current;
   const { theme } = useTheme();
-
-  const isMainActionEnabled = activeTab === 'Clientes' || activeTab === 'Citas';
 
   const getMainIcon = () => {
     if (menuOpen) return "close"; 
@@ -91,22 +82,30 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
   return (
     <View style={styles.bottomBarContainer} pointerEvents="box-none">
       
-      <Animated.View 
-        style={[styles.menuOption, getAnimatedStyle(3)]}
-        pointerEvents={menuOpen ? 'auto' : 'none'} 
-      >
-        <TouchableOpacity style={styles.optionButton} onPress={() => { toggleMenu(); Alert.alert("Info", "Función global futura"); }}>
-          <Text style={[styles.optionLabel, { backgroundColor: theme.card, color: theme.text }]}>Opciones</Text>
+      {/* --- MENÚ FLOTANTE --- */}
+
+      {/* 1. Mi Perfil (Top) */}
+      <Animated.View style={[styles.menuOption, getAnimatedStyle(4)]} pointerEvents={menuOpen ? 'auto' : 'none'}>
+        <TouchableOpacity style={styles.optionButton} onPress={() => { toggleMenu(); onTabChange('Perfil'); }}>
+          <Text style={[styles.optionLabel, { backgroundColor: theme.card, color: theme.text }]}>Mi Perfil</Text>
           <View style={[styles.optionIcon, { backgroundColor: theme.inputBackground }]}>
-            <MaterialCommunityIcons name="cog" size={20} color={theme.text} />
+            <MaterialCommunityIcons name="account-circle" size={20} color={theme.text} />
           </View>
         </TouchableOpacity>
       </Animated.View>
 
-      <Animated.View 
-        style={[styles.menuOption, getAnimatedStyle(2)]}
-        pointerEvents={menuOpen ? 'auto' : 'none'}
-      >
+      {/* 2. Servicios Realizados (Historial) */}
+      <Animated.View style={[styles.menuOption, getAnimatedStyle(3)]} pointerEvents={menuOpen ? 'auto' : 'none'}>
+        <TouchableOpacity style={styles.optionButton} onPress={() => { toggleMenu(); onTabChange('Servicios'); }}>
+          <Text style={[styles.optionLabel, { backgroundColor: theme.card, color: theme.text }]}>Servicios Realizados</Text>
+          <View style={[styles.optionIcon, { backgroundColor: '#E8F5E9' }]}>
+            <MaterialCommunityIcons name="history" size={20} color="#2E7D32" />
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+
+      {/* 3. Buscar Mascotas */}
+      <Animated.View style={[styles.menuOption, getAnimatedStyle(2)]} pointerEvents={menuOpen ? 'auto' : 'none'}>
         <TouchableOpacity style={styles.optionButton} onPress={() => { toggleMenu(); onPetsClick(); }}>
           <Text style={[styles.optionLabel, { backgroundColor: theme.card, color: theme.text }]}>Buscar Mascotas</Text>
           <View style={[styles.optionIcon, { backgroundColor: theme.inputBackground }]}>
@@ -115,10 +114,8 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
         </TouchableOpacity>
       </Animated.View>
 
-      <Animated.View 
-        style={[styles.menuOption, getAnimatedStyle(1)]}
-        pointerEvents={menuOpen ? 'auto' : 'none'}
-      >
+      {/* 4. Reportes */}
+      <Animated.View style={[styles.menuOption, getAnimatedStyle(1)]} pointerEvents={menuOpen ? 'auto' : 'none'}>
         <TouchableOpacity style={styles.optionButton} onPress={() => { toggleMenu(); onReportsClick(); }}>
           <Text style={[styles.optionLabel, { backgroundColor: theme.card, color: theme.text }]}>Reportes</Text>
           <View style={[styles.optionIcon, { backgroundColor: theme.isDark ? '#003c8f' : '#E3F2FD' }]}>
@@ -127,14 +124,16 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
         </TouchableOpacity>
       </Animated.View>
 
+      {/* --- BARRA INFERIOR --- */}
       <View style={[styles.bottomBar, { backgroundColor: theme.tabBar }]}>
         <TabIcon name="home" label="Inicio" tabName="Home" />
         <TabIcon name="calendar-text" label="Citas" tabName="Citas" />
         <View style={{ width: 70 }} /> 
+        <TabIcon name="store" label="Tienda" tabName="Tienda" /> 
         <TabIcon name="account-group" label="Clientes" tabName="Clientes" />
-        <TabIcon name="account" label="Perfil" tabName="Perfil" />
       </View>
 
+      {/* BOTÓN + */}
       <TouchableOpacity 
         style={[
             styles.floatingButton, 
@@ -142,31 +141,16 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
             { borderColor: theme.background }
         ]} 
         onPress={() => {
-            if (menuOpen) {
-                toggleMenu();
-            } else if (isMainActionEnabled) {
-                onAddClick();
-            } else {
-                toggleMenu();
-            }
+            if (menuOpen) toggleMenu();
+            else if (activeTab === 'Home' || activeTab === 'Tienda' || activeTab === 'Perfil' || activeTab === 'Servicios') toggleMenu();
+            else onAddClick();
         }}      
-        onLongPress={toggleMenu}  
-        delayLongPress={300}      
+        onLongPress={toggleMenu}
+        delayLongPress={300}
         activeOpacity={0.9}
       >
-        <Animated.View style={{ 
-            transform: [{ 
-                rotate: animation.interpolate({ 
-                    inputRange: [0, 1], 
-                    outputRange: ['0deg', '135deg'] 
-                }) 
-            }] 
-        }}>
-          <MaterialCommunityIcons 
-            name={getMainIcon() as any} 
-            size={28} 
-            color={COLORES.textoSobrePrincipal} 
-          />
+        <Animated.View style={{ transform: [{ rotate: animation.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '135deg'] }) }] }}>
+          <MaterialCommunityIcons name={getMainIcon() as any} size={28} color={COLORES.textoSobrePrincipal} />
         </Animated.View>
       </TouchableOpacity>
 
@@ -181,31 +165,51 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
 
 const styles = StyleSheet.create({
   bottomBarContainer: { 
-    position: 'absolute', bottom: 0, width: '100%', alignItems: 'center', zIndex: 100 
+    position: 'absolute', 
+    bottom: 0, 
+    width: '100%', 
+    alignItems: 'center', 
+    zIndex: 100 
   },
   bottomBar: {
-    flexDirection: 'row', width: '100%', height: 70,
-    justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20,
-    borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 3,
-    elevation: 10, paddingBottom: Platform.OS === 'ios' ? 20 : 0,
+    flexDirection: 'row', 
+    width: '100%', 
+    // 1. Aumentamos la altura para que no se corte al subir el padding
+    height: Platform.OS === 'ios' ? 90 : 70, 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 15,
+    borderTopLeftRadius: 20, 
+    borderTopRightRadius: 20,
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: -2 }, 
+    shadowOpacity: 0.1, 
+    shadowRadius: 3,
+    elevation: 10, 
+    // 2. Aumentamos el padding inferior para separar los iconos de la "rayita"
+    paddingBottom: Platform.OS === 'ios' ? 35 : 10,
   },
-  tabItem: { alignItems: 'center', justifyContent: 'center', width: 60 },
-  tabLabel: { fontSize: 10, marginTop: 2, fontWeight: '600' },
+  tabItem: { alignItems: 'center', justifyContent: 'center', width: 55 },
+  tabLabel: { fontSize: 9, marginTop: 2, fontWeight: '600' },
   
   floatingButton: {
-    position: 'absolute', bottom: 30,
+    position: 'absolute', 
+    // 3. Subimos el botón para que coincida con la nueva altura de la barra
+    bottom: Platform.OS === 'ios' ? 45 : 35, 
     backgroundColor: COLORES.verdeBoton,
     width: 65, height: 65, borderRadius: 32.5,
     justifyContent: 'center', alignItems: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4.65, elevation: 8,
-    borderWidth: 4,
-    zIndex: 102
+    borderWidth: 4, zIndex: 102
   },
-  floatingButtonActive: {
-    backgroundColor: COLORES.danger,
+  floatingButtonActive: { backgroundColor: COLORES.danger },
+  
+  menuOption: { 
+    position: 'absolute', 
+    // 4. Subimos el menú para que salga desde la nueva posición del botón
+    bottom: Platform.OS === 'ios' ? 45 : 35, 
+    zIndex: 101 
   },
-  menuOption: { position: 'absolute', bottom: 30, zIndex: 101 },
   optionButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 10 },
   optionLabel: {
     paddingVertical: 6, paddingHorizontal: 12,
@@ -217,8 +221,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 2, elevation: 4
   },
-  overlay: { 
-    position: 'absolute', bottom: 0, left: 0, right: 0, height: height, width: '100%',
-    backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 90 
-  }
+  overlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: height, width: '100%', backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 90 }
 });
