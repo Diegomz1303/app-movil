@@ -19,6 +19,12 @@ import { PieChart } from 'react-native-chart-kit';
 import { supabase } from '../../lib/supabase';
 import { COLORES } from '../../constants/colors';
 
+// Librerías para Excel
+// --- CORRECCIÓN: Usamos la importación 'legacy' para evitar el error de la versión nueva de Expo ---
+import * as FileSystem from 'expo-file-system/legacy'; 
+import * as Sharing from 'expo-sharing';
+import XLSX from 'xlsx';
+
 // 1. Importamos el hook del tema
 import { useTheme } from '../../context/ThemeContext';
 
@@ -34,6 +40,7 @@ type ReportType = 'services' | 'products';
 export default function ReportsModal({ visible, onClose }: ReportsModalProps) {
   const scaleValue = useRef(new Animated.Value(0)).current;
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   
   const { theme, isDark } = useTheme();
   
@@ -47,6 +54,10 @@ export default function ReportsModal({ visible, onClose }: ReportsModalProps) {
   // Datos Separados
   const [statsServices, setStatsServices] = useState({ total: 0, count: 0, avg: 0, chart: [] as any[] });
   const [statsProducts, setStatsProducts] = useState({ total: 0, count: 0, avg: 0, chart: [] as any[] });
+
+  // Datos Crudos (Para el Excel)
+  const [rawCitas, setRawCitas] = useState<any[]>([]);
+  const [rawVentas, setRawVentas] = useState<any[]>([]);
 
   const CHART_COLORS = [COLORES.principal, '#FFB74D', '#4FC3F7', '#E57373', '#9575CD'];
 
@@ -69,10 +80,20 @@ export default function ReportsModal({ visible, onClose }: ReportsModalProps) {
       const startStr = startDate.toISOString().split('T')[0];
       const endStr = endDate.toISOString().split('T')[0];
 
-      // --- 1. REPORTE DE SERVICIOS (Citas) ---
+      // 1. Traer Citas (Servicios)
       const { data: dataCitas, error: errorCitas } = await supabase
         .from('citas')
-        .select('precio, metodo_pago')
+        .select(`
+            id, 
+            fecha, 
+            hora, 
+            servicio, 
+            precio, 
+            metodo_pago, 
+            estado,
+            mascotas (nombre),
+            clientes (nombres, apellidos)
+        `)
         .eq('estado', 'completada')
         .gte('fecha', startStr)
         .lte('fecha', endStr);
@@ -80,6 +101,8 @@ export default function ReportsModal({ visible, onClose }: ReportsModalProps) {
       if (errorCitas) throw errorCitas;
 
       const citas = dataCitas || [];
+      setRawCitas(citas); 
+
       const totalCitas = citas.reduce((sum, item) => sum + (Number(item.precio) || 0), 0);
       const countCitas = citas.length;
       const avgCitas = countCitas > 0 ? totalCitas / countCitas : 0;
@@ -92,15 +115,16 @@ export default function ReportsModal({ visible, onClose }: ReportsModalProps) {
         chart: chartCitas
       });
 
-      // --- 2. REPORTE DE PRODUCTOS (Ventas) ---
-      // Intentamos consultar ventas, si no existe la tabla no fallará fatalmente gracias al try/catch global o manejo local
+      // 2. Traer Ventas de Productos
       const { data: dataVentas, error: errorVentas } = await supabase
         .from('ventas')
-        .select('total, metodo_pago')
+        .select('id, fecha, total, metodo_pago')
         .gte('fecha', startStr)
         .lte('fecha', endStr);
 
       const ventas = (!errorVentas && dataVentas) ? dataVentas : [];
+      setRawVentas(ventas);
+
       const totalVentas = ventas.reduce((sum, item) => sum + (Number(item.total) || 0), 0);
       const countVentas = ventas.length;
       const avgVentas = countVentas > 0 ? totalVentas / countVentas : 0;
@@ -115,7 +139,6 @@ export default function ReportsModal({ visible, onClose }: ReportsModalProps) {
 
     } catch (e) {
       console.error(e);
-      // No mostramos alerta si es error de tabla ventas inexistente al inicio
     } finally {
       setLoading(false);
     }
@@ -137,6 +160,72 @@ export default function ReportsModal({ visible, onClose }: ReportsModalProps) {
     }));
   };
 
+  // --- FUNCIÓN PARA EXPORTAR A EXCEL ---
+  const exportToExcel = async () => {
+    if (rawCitas.length === 0 && rawVentas.length === 0) {
+        Alert.alert("Sin datos", "No hay información para exportar en estas fechas.");
+        return;
+    }
+
+    setExporting(true);
+    try {
+        // 1. Preparar datos
+        const serviciosData = rawCitas.map(c => ({
+            ID: c.id,
+            Fecha: c.fecha,
+            Hora: c.hora,
+            Servicio: c.servicio,
+            Mascota: c.mascotas?.nombre || 'N/A',
+            Cliente: c.clientes ? `${c.clientes.nombres} ${c.clientes.apellidos}` : 'N/A',
+            Precio: c.precio,
+            Metodo_Pago: c.metodo_pago
+        }));
+
+        const ventasData = rawVentas.map(v => ({
+            ID_Venta: v.id,
+            Fecha: v.fecha,
+            Total: v.total,
+            Metodo_Pago: v.metodo_pago
+        }));
+
+        // 2. Crear Libro Excel
+        const wb = XLSX.utils.book_new();
+        
+        if (serviciosData.length > 0) {
+            const wsServices = XLSX.utils.json_to_sheet(serviciosData);
+            XLSX.utils.book_append_sheet(wb, wsServices, "Servicios");
+        }
+
+        if (ventasData.length > 0) {
+            const wsSales = XLSX.utils.json_to_sheet(ventasData);
+            XLSX.utils.book_append_sheet(wb, wsSales, "Ventas Productos");
+        }
+
+        // 3. Generar archivo Base64
+        const wbout = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+        const fileName = `Reporte_PetShop_${startDate.toISOString().split('T')[0]}.xlsx`;
+        
+        // Usamos || "" para asegurar que no sea null
+        const uri = (FileSystem.documentDirectory || "") + fileName;
+
+        // 4. Guardar
+        // Usamos la importación 'legacy' arriba, así que esto debería funcionar
+        await FileSystem.writeAsStringAsync(uri, wbout, { encoding: 'base64' });
+        
+        if (await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(uri);
+        } else {
+            Alert.alert("Error", "No se puede compartir en este dispositivo");
+        }
+
+    } catch (error: any) {
+        console.log(error);
+        Alert.alert("Error exportando", error.message);
+    } finally {
+        setExporting(false);
+    }
+  };
+
   const onDateChange = (event: any, selectedDate?: Date) => {
     const currentType = showPicker;
     if (Platform.OS === 'android') setShowPicker(null);
@@ -148,7 +237,7 @@ export default function ReportsModal({ visible, onClose }: ReportsModalProps) {
   };
 
   const currentStats = activeTab === 'services' ? statsServices : statsProducts;
-  const currentColor = activeTab === 'services' ? theme.primary : '#FF9800'; // Verde para Servicios, Naranja para Productos
+  const currentColor = activeTab === 'services' ? theme.primary : '#FF9800'; 
 
   const Card = ({ title, value, icon, color }: any) => (
     <View style={[styles.statCard, { backgroundColor: theme.inputBackground, borderColor: theme.border }]}>
@@ -162,7 +251,6 @@ export default function ReportsModal({ visible, onClose }: ReportsModalProps) {
     </View>
   );
 
-  // Estilos dinámicos
   const textStyle = { color: theme.text };
   const inputBg = { backgroundColor: theme.inputBackground, borderColor: theme.border };
 
@@ -181,7 +269,7 @@ export default function ReportsModal({ visible, onClose }: ReportsModalProps) {
             </TouchableOpacity>
           </View>
 
-          {/* Tabs Selector */}
+          {/* Tabs */}
           <View style={styles.tabContainer}>
             <TouchableOpacity 
                 style={[styles.tabButton, activeTab === 'services' && { backgroundColor: theme.primary }]}
@@ -192,7 +280,7 @@ export default function ReportsModal({ visible, onClose }: ReportsModalProps) {
             </TouchableOpacity>
             
             <TouchableOpacity 
-                style={[styles.tabButton, activeTab === 'products' && { backgroundColor: '#FF9800' }]} // Naranja para productos
+                style={[styles.tabButton, activeTab === 'products' && { backgroundColor: '#FF9800' }]} 
                 onPress={() => setActiveTab('products')}
             >
                 <MaterialCommunityIcons name="store" size={20} color={activeTab === 'products' ? 'white' : theme.textSecondary} />
@@ -202,7 +290,7 @@ export default function ReportsModal({ visible, onClose }: ReportsModalProps) {
 
           <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
             
-            {/* Filtros de Fecha */}
+            {/* Filtros y Botones */}
             <View style={styles.dateRow}>
               <TouchableOpacity style={[styles.dateInput, inputBg]} onPress={() => setShowPicker('start')}>
                 <MaterialCommunityIcons name="calendar" size={18} color={theme.textSecondary} />
@@ -214,16 +302,30 @@ export default function ReportsModal({ visible, onClose }: ReportsModalProps) {
                 <Text style={[styles.dateText, textStyle]}>{endDate.toLocaleDateString()}</Text>
               </TouchableOpacity>
               
-              <TouchableOpacity style={[styles.refreshBtn, { backgroundColor: currentColor }]} onPress={generateReport}>
-                 <MaterialCommunityIcons name="refresh" size={20} color="white" />
-              </TouchableOpacity>
+              <View style={{flexDirection: 'row', gap: 8}}>
+                  {/* Botón Refrescar */}
+                  <TouchableOpacity style={[styles.iconBtn, { backgroundColor: currentColor }]} onPress={generateReport}>
+                     <MaterialCommunityIcons name="refresh" size={20} color="white" />
+                  </TouchableOpacity>
+
+                  {/* Botón Excel */}
+                  <TouchableOpacity 
+                    style={[styles.iconBtn, { backgroundColor: '#217346' }]} 
+                    onPress={exportToExcel}
+                    disabled={exporting}
+                  >
+                     {exporting ? 
+                        <ActivityIndicator size="small" color="white" /> : 
+                        <MaterialCommunityIcons name="microsoft-excel" size={20} color="white" />
+                     }
+                  </TouchableOpacity>
+              </View>
             </View>
 
             {loading ? (
               <ActivityIndicator size="large" color={currentColor} style={{ marginVertical: 30 }} />
             ) : (
               <>
-                {/* Tarjeta Principal */}
                 <View style={[styles.mainStatCard, { backgroundColor: currentColor }]}>
                     <Text style={styles.mainStatLabel}>
                         {activeTab === 'services' ? 'Ingresos por Servicios' : 'Ventas de Productos'}
@@ -248,7 +350,7 @@ export default function ReportsModal({ visible, onClose }: ReportsModalProps) {
                   </View>
                   <View style={{ flex: 1 }}>
                      <Card 
-                      title="Ticket Promedio" 
+                      title="Ticket Prom." 
                       value={`S/. ${currentStats.avg.toFixed(0)}`} 
                       icon="chart-line" 
                       color={activeTab === 'services' ? "#42A5F5" : "#FF7043"} 
@@ -279,10 +381,8 @@ export default function ReportsModal({ visible, onClose }: ReportsModalProps) {
                 </View>
               </>
             )}
-            
             <View style={{ height: 20 }} />
           </ScrollView>
-
         </Animated.View>
 
         {showPicker && (
@@ -301,45 +401,35 @@ export default function ReportsModal({ visible, onClose }: ReportsModalProps) {
 const styles = StyleSheet.create({
   centeredView: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   overlay: { position: 'absolute', width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)' },
-  
   modalView: {
-    width: width * 0.9, maxHeight: height * 0.9,
+    width: width * 0.9, maxHeight: height * 0.85,
     borderRadius: 25, padding: 20,
     shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 15,
     overflow: 'hidden'
   },
-
   header: { 
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', 
     marginBottom: 15, paddingBottom: 10, borderBottomWidth: 1
   },
   headerTitle: { fontSize: 20, fontWeight: 'bold' },
   closeBtn: { padding: 5 },
-  
-  // Tabs
   tabContainer: { flexDirection: 'row', marginBottom: 15, backgroundColor: '#F5F5F5', borderRadius: 12, padding: 4 },
   tabButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, gap: 6 },
   tabText: { fontWeight: 'bold', fontSize: 13 },
-
   content: { paddingBottom: 10 },
-  
   dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   dateInput: { 
     flexDirection: 'row', alignItems: 'center', 
-    paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, width: '38%', gap: 6, borderWidth: 1
+    paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, width: '30%', gap: 4, borderWidth: 1
   },
-  dateText: { fontSize: 12, fontWeight: '600' },
-  refreshBtn: { 
-    padding: 10, borderRadius: 10, alignItems: 'center', justifyContent: 'center' 
-  },
-
+  dateText: { fontSize: 11, fontWeight: '600' },
+  iconBtn: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   mainStatCard: {
     padding: 20, borderRadius: 16, marginBottom: 15, overflow: 'hidden', position: 'relative'
   },
   mainStatLabel: { color: 'rgba(255,255,255,0.9)', fontSize: 14, marginBottom: 5 },
   mainStatValue: { color: 'white', fontSize: 32, fontWeight: 'bold' },
   bgIcon: { position: 'absolute', right: 15, bottom: 15 },
-
   statCard: { 
     borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1,
     flexDirection: 'row', alignItems: 'center'
@@ -348,7 +438,6 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 12 },
   cardValue: { fontSize: 18, fontWeight: 'bold' },
   rowStats: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
-
   sectionTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 10 },
   chartCard: { 
     borderRadius: 16, padding: 10, alignItems: 'center', borderWidth: 1, justifyContent: 'center'

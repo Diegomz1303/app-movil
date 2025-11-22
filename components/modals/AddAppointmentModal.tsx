@@ -18,8 +18,6 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { supabase } from '../../lib/supabase';
 import { COLORES } from '../../constants/colors';
-
-// 1. Importamos el hook del tema
 import { useTheme } from '../../context/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
@@ -33,16 +31,13 @@ interface AddAppointmentModalProps {
   onAppointmentAdded?: () => void;
 }
 
-// LISTA DE SERVICIOS PET SHOP
+// LISTA EXACTA SEGÚN TU IMAGEN DE REFERENCIA
 const SERVICIOS = [
-  'BAÑO COMPLETO',
+  'BAÑO',
   'BAÑO Y CORTE',
-  'CORTE HIGIÉNICO',
-  'DESLANADO',
+  'SERVICIO DE COLORIMETRÍA',
   'CORTE DE UÑAS',
-  'LIMPIEZA DE OÍDOS',
-  'BAÑO ANTIPULGAS',
-  'SPA MASCOTA'
+  'DESPARASITACIÓN'
 ];
 
 const HORARIOS = [
@@ -54,15 +49,11 @@ const HORARIOS = [
 export default function AddAppointmentModal({ visible, onClose, onAppointmentAdded }: AddAppointmentModalProps) {
   const scaleValue = useRef(new Animated.Value(0)).current;
   const [loading, setLoading] = useState(false);
-  
-  // 2. Usamos el tema
   const { theme, isDark } = useTheme();
 
-  // Data Lists
   const [clientsList, setClientsList] = useState<SimpleClient[]>([]);
   const [petsList, setPetsList] = useState<SimplePet[]>([]);
 
-  // Form States
   const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
   const [clientNameDisplay, setClientNameDisplay] = useState('');
   
@@ -77,7 +68,6 @@ export default function AddAppointmentModal({ visible, onClose, onAppointmentAdd
   const [servicio, setServicio] = useState('');
   const [notas, setNotas] = useState('');
 
-  // Control de Dropdowns
   const [showClientDrop, setShowClientDrop] = useState(false);
   const [showPetDrop, setShowPetDrop] = useState(false);
   const [showTimeDrop, setShowTimeDrop] = useState(false);
@@ -127,7 +117,6 @@ export default function AddAppointmentModal({ visible, onClose, onAppointmentAdd
 
   const onChangeDate = (event: DateTimePickerEvent, selectedDate?: Date) => {
     if (Platform.OS === 'android') setShowDatePicker(false);
-    
     if (event.type === 'set' && selectedDate) {
       setDate(selectedDate);
       const year = selectedDate.getFullYear();
@@ -197,21 +186,14 @@ export default function AddAppointmentModal({ visible, onClose, onAppointmentAdd
     }
   };
 
-  // Estilos dinámicos para inputs
   const inputStyle = [
     styles.dropdownButton, 
-    { 
-        backgroundColor: theme.inputBackground, 
-        borderColor: theme.border 
-    }
+    { backgroundColor: theme.inputBackground, borderColor: theme.border }
   ];
 
   const dropdownContainerStyle = [
     styles.accordionContent,
-    {
-        backgroundColor: theme.card,
-        borderColor: theme.border
-    }
+    { backgroundColor: theme.card, borderColor: theme.border }
   ];
 
   const textColor = { color: theme.text };
@@ -221,29 +203,22 @@ export default function AddAppointmentModal({ visible, onClose, onAppointmentAdd
     <Modal visible={visible} animationType="fade" transparent={true} onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.centeredView}>
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose} />
-
-        {/* Fondo del Modal Dinámico */}
         <Animated.View style={[styles.modalView, { transform: [{ scale: scaleValue }], backgroundColor: theme.card }]}>
           
           <View style={styles.header}>
-            <Text style={[styles.modalTitle, textColor]}>Agendar Nueva Cita</Text>
+            <Text style={[styles.modalTitle, textColor]}>Agendar Servicio</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeIcon}>
               <MaterialCommunityIcons name="close" size={24} color={theme.textSecondary} />
             </TouchableOpacity>
           </View>
-          <Text style={[styles.subTitleHeader, { color: theme.textSecondary }]}>Completa los datos para registrar una cita</Text>
+          <Text style={[styles.subTitleHeader, { color: theme.textSecondary }]}>Agenda un nuevo servicio de estética</Text>
 
-          <ScrollView 
-            showsVerticalScrollIndicator={false} 
-            contentContainerStyle={styles.scrollContent} 
-            keyboardShouldPersistTaps="handled"
-          >
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
             
-            {/* 1. CLIENTE */}
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: theme.textSecondary }]}>1. Cliente *</Text>
               <TouchableOpacity 
-                style={[inputStyle, showClientDrop && { borderColor: theme.primary, backgroundColor: isDark ? '#1a301a' : '#F0F9F0' }]} 
+                style={[inputStyle, showClientDrop && { borderColor: theme.primary }]} 
                 onPress={() => toggleDropdown('client')}
               >
                 <Text style={[styles.inputText, { color: clientNameDisplay ? theme.text : placeholderColor }]}>
@@ -263,19 +238,11 @@ export default function AddAppointmentModal({ visible, onClose, onAppointmentAdd
               )}
             </View>
 
-            {/* 2. MASCOTA */}
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: theme.textSecondary }]}>2. Mascota *</Text>
               <TouchableOpacity 
-                style={[
-                    inputStyle, 
-                    showPetDrop && { borderColor: theme.primary, backgroundColor: isDark ? '#1a301a' : '#F0F9F0' },
-                    !selectedClientId && { opacity: 0.6 }
-                ]} 
-                onPress={() => { 
-                    if(selectedClientId) toggleDropdown('pet');
-                    else Alert.alert("Aviso", "Primero selecciona un cliente"); 
-                }}
+                style={[inputStyle, showPetDrop && { borderColor: theme.primary }, !selectedClientId && { opacity: 0.6 }]} 
+                onPress={() => { if(selectedClientId) toggleDropdown('pet'); else Alert.alert("Aviso", "Primero selecciona un cliente"); }}
               >
                 <Text style={[styles.inputText, { color: petNameDisplay ? theme.text : placeholderColor }]}>
                     {petNameDisplay || 'Selecciona una mascota...'}
@@ -296,7 +263,6 @@ export default function AddAppointmentModal({ visible, onClose, onAppointmentAdd
               )}
             </View>
 
-            {/* 3. FECHA Y HORA */}
             <View style={styles.row}>
                 <View style={styles.halfInput}>
                     <Text style={[styles.label, { color: theme.textSecondary }]}>3. Fecha *</Text>
@@ -314,7 +280,7 @@ export default function AddAppointmentModal({ visible, onClose, onAppointmentAdd
                 <View style={styles.halfInput}>
                     <Text style={[styles.label, { color: theme.textSecondary }]}>4. Hora *</Text>
                     <TouchableOpacity 
-                        style={[inputStyle, showTimeDrop && { borderColor: theme.primary, backgroundColor: isDark ? '#1a301a' : '#F0F9F0' }]} 
+                        style={[inputStyle, showTimeDrop && { borderColor: theme.primary }]} 
                         onPress={() => toggleDropdown('time')}
                     >
                          <Text style={[styles.inputText, { color: hora ? theme.text : placeholderColor }]}>
@@ -338,22 +304,17 @@ export default function AddAppointmentModal({ visible, onClose, onAppointmentAdd
                                 ]} 
                                 onPress={() => { setHora(h); setShowTimeDrop(false); }}
                             >
-                                <Text style={[
-                                    styles.timeChipText, 
-                                    { color: theme.text },
-                                    hora === h && { color: 'white' }
-                                ]}>{h}</Text>
+                                <Text style={[styles.timeChipText, { color: theme.text }, hora === h && { color: 'white' }]}>{h}</Text>
                             </TouchableOpacity>
                         ))}
                     </View>
                 </View>
             )}
 
-            {/* 5. SERVICIO */}
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: theme.textSecondary }]}>5. Servicio *</Text>
               <TouchableOpacity 
-                style={[inputStyle, showServiceDrop && { borderColor: theme.primary, backgroundColor: isDark ? '#1a301a' : '#F0F9F0' }]} 
+                style={[inputStyle, showServiceDrop && { borderColor: theme.primary }]} 
                 onPress={() => toggleDropdown('service')}
               >
                 <Text style={[styles.inputText, { color: servicio ? theme.text : placeholderColor }]}>
@@ -373,12 +334,11 @@ export default function AddAppointmentModal({ visible, onClose, onAppointmentAdd
               )}
             </View>
 
-            {/* 6. NOTAS */}
             <View style={styles.inputGroup}>
-              <Text style={[styles.label, { color: theme.textSecondary }]}>6. Notas Adicionales (Opcional)</Text>
+              <Text style={[styles.label, { color: theme.textSecondary }]}>6. Notas / Pedidos Especiales</Text>
               <TextInput
                 style={[inputStyle, styles.textArea, { color: theme.text }]}
-                placeholder="Ej: Corte cachorro, usar champú especial..."
+                placeholder="Ej: Poner lazo rojo, perfume de vainilla..."
                 placeholderTextColor={placeholderColor}
                 multiline={true}
                 numberOfLines={3}
@@ -388,24 +348,14 @@ export default function AddAppointmentModal({ visible, onClose, onAppointmentAdd
               />
             </View>
 
-            {/* Botones */}
             <View style={styles.footer}>
-              <TouchableOpacity 
-                style={[styles.btnCancel, { backgroundColor: theme.inputBackground }]} 
-                onPress={onClose}
-              >
+              <TouchableOpacity style={[styles.btnCancel, { backgroundColor: theme.inputBackground }]} onPress={onClose}>
                   <Text style={[styles.textCancel, { color: theme.text }]}>Cancelar</Text>
               </TouchableOpacity>
-
               <TouchableOpacity style={styles.btnSave} onPress={handleSave} disabled={loading}>
-                  {loading ? (
-                      <ActivityIndicator color={COLORES.textoSobrePrincipal} />
-                  ) : (
-                      <Text style={styles.textSave}>Agendar Cita</Text>
-                  )}
+                  {loading ? <ActivityIndicator color={COLORES.textoSobrePrincipal} /> : <Text style={styles.textSave}>Agendar</Text>}
               </TouchableOpacity>
             </View>
-
             <View style={{ height: 30 }} />
           </ScrollView>
         </Animated.View>
@@ -427,53 +377,22 @@ const styles = StyleSheet.create({
   subTitleHeader: { fontSize: 14, marginBottom: 20 },
   closeIcon: { padding: 5 },
   scrollContent: { paddingBottom: 20 },
-  
   inputGroup: { marginBottom: 15 },
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
   halfInput: { width: '48%' },
-  
   label: { fontSize: 13, marginBottom: 6, fontWeight: '600' },
-  
   dropdownButton: {
     borderRadius: 10, padding: 12, borderWidth: 1,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: 50,
   },
   inputText: { fontSize: 14, flex: 1 },
-  
-  accordionContent: {
-    borderRadius: 8,
-    marginTop: 8,
-    borderWidth: 1,
-    overflow: 'hidden'
-  },
-  dropdownItem: { 
-    paddingVertical: 14, 
-    paddingHorizontal: 12, 
-    borderBottomWidth: 1, 
-  },
+  accordionContent: { borderRadius: 8, marginTop: 8, borderWidth: 1, overflow: 'hidden' },
+  dropdownItem: { paddingVertical: 14, paddingHorizontal: 12, borderBottomWidth: 1 },
   dropdownItemText: { fontSize: 14 },
-
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    padding: 10,
-    justifyContent: 'space-between'
-  },
-  timeChip: {
-    width: '30%', 
-    paddingVertical: 10,
-    marginBottom: 8,
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-  },
-  timeChipText: {
-    fontSize: 13,
-    fontWeight: '500'
-  },
-  
+  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', padding: 10, justifyContent: 'space-between' },
+  timeChip: { width: '30%', paddingVertical: 10, marginBottom: 8, borderRadius: 8, alignItems: 'center', borderWidth: 1 },
+  timeChipText: { fontSize: 13, fontWeight: '500' },
   textArea: { height: 80 },
-  
   footer: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 20, gap: 10 },
   btnCancel: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12 },
   textCancel: { fontWeight: 'bold', fontSize: 15 },

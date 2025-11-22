@@ -9,7 +9,7 @@ import {
   RefreshControl 
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { BarChart } from 'react-native-chart-kit'; // Cambiado a BarChart
+import { BarChart } from 'react-native-chart-kit';
 import { supabase } from '../../lib/supabase';
 import { COLORES } from '../../constants/colors';
 import { useData } from '../../context/DataContext';
@@ -67,17 +67,16 @@ export default function HomeTab() {
     for (let i = 5; i >= 0; i--) {
       const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
       const nombreMes = d.toLocaleString('es-ES', { month: 'short' }); 
-      // Clave YYYY-MM para agrupar
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       
       meses[key] = { citas: 0, ventas: 0 };
-      etiquetas.push(nombreMes); // Ej: "jun", "jul"
+      etiquetas.push(nombreMes); 
     }
 
     // Contar Citas por mes
     citas.forEach(cita => {
       if (cita.fecha) {
-        const key = cita.fecha.substring(0, 7); // YYYY-MM
+        const key = cita.fecha.substring(0, 7); 
         if (meses[key]) meses[key].citas += 1;
       }
     });
@@ -85,12 +84,11 @@ export default function HomeTab() {
     // Contar Ventas por mes
     ventas.forEach(venta => {
       if (venta.fecha) {
-        const key = venta.fecha.substring(0, 7); // YYYY-MM
+        const key = venta.fecha.substring(0, 7); 
         if (meses[key]) meses[key].ventas += 1;
       }
     });
 
-    // Extraer valores ordenados
     const keysOrdenadas = Object.keys(meses).sort();
     keysOrdenadas.forEach(k => {
         valoresCitas.push(meses[k].citas);
@@ -108,11 +106,10 @@ export default function HomeTab() {
     setChartReady(false); 
     
     try {
-      // Traemos Citas, Clientes y Ventas en paralelo
       const [resCitas, resClientes, resVentas] = await Promise.all([
         supabase.from('citas').select('fecha, precio, estado'),
         supabase.from('clientes').select('*', { count: 'exact', head: true }),
-        supabase.from('ventas').select('fecha, total') // Asumiendo que creaste la tabla ventas
+        supabase.from('ventas').select('fecha, total')
       ]);
 
       const citasData = resCitas.data || [];
@@ -150,14 +147,15 @@ export default function HomeTab() {
     </View>
   ));
 
+  // --- FUNCIÓN DE RENDERIZADO DE GRÁFICO MEJORADA ---
   const renderBarChart = (dataValues: number[], barColor: string) => (
     <BarChart
         data={{
             labels: chartLabels,
             datasets: [{ data: dataValues }]
         }}
-        width={screenWidth - 40}
-        height={220}
+        width={screenWidth - 40} // Ancho completo menos márgenes
+        height={240}
         yAxisLabel=""
         yAxisSuffix=""
         fromZero
@@ -165,16 +163,34 @@ export default function HomeTab() {
             backgroundColor: theme.card,
             backgroundGradientFrom: theme.card,
             backgroundGradientTo: theme.card,
+            // ESTO HACE QUE LAS BARRAS SEAN SÓLIDAS Y VISIBLES
+            fillShadowGradientFrom: barColor,
+            fillShadowGradientTo: barColor,
+            fillShadowGradientOpacity: 1, 
+            
             decimalPlaces: 0,
-            // Color de las barras
-            color: (opacity = 1) => barColor, 
-            // Color de las etiquetas (ejes)
-            labelColor: (opacity = 1) => isDark ? `rgba(255, 255, 255, ${opacity})` : `rgba(0, 0, 0, ${opacity})`,
-            barPercentage: 0.7,
-            style: { borderRadius: 16 },
+            color: (opacity = 1) => barColor, // Color base
+            labelColor: (opacity = 1) => theme.textSecondary, // Color de textos (meses)
+            
+            barPercentage: 0.6, // Barras más anchas (0.1 a 1)
+            
+            propsForBackgroundLines: {
+                strokeWidth: 0.5,
+                stroke: theme.border,
+                strokeDasharray: "4", // Líneas punteadas sutiles
+            },
+            propsForLabels: {
+                fontSize: 11,
+                fontWeight: '600'
+            }
         }}
-        style={{ marginVertical: 8, borderRadius: 16 }}
-        showValuesOnTopOfBars={true} // Muestra el número arriba de la barra
+        style={{ 
+            marginVertical: 8, 
+            borderRadius: 16,
+            paddingRight: 0 
+        }}
+        showValuesOnTopOfBars={true} // Muestra el número exacto arriba
+        withInnerLines={true}
     />
   );
 
@@ -216,17 +232,17 @@ export default function HomeTab() {
             <View style={[styles.chartContainer, { backgroundColor: theme.card }]}>
                 <View style={styles.chartHeader}>
                     <MaterialCommunityIcons name="chart-bar" size={20} color={theme.text} />
-                    <Text style={[styles.chartTitle, { color: theme.text }]}>Citas (Últimos 6 meses)</Text>
+                    <Text style={[styles.chartTitle, { color: theme.text }]}>Tendencia de Citas</Text>
                 </View>
                 
-                {chartReady ? renderBarChart(citasChartValues, isDark ? `rgba(76, 175, 80, 1)` : `rgba(76, 175, 80, 1)`) : (
+                {chartReady ? renderBarChart(citasChartValues, COLORES.principal) : (
                     <ActivityIndicator color={theme.primary} style={{ height: 220 }} />
                 )}
             </View>
           </View>
 
           {/* Divisor visual */}
-          <View style={{ height: 1, backgroundColor: theme.border, marginVertical: 10, marginHorizontal: 20 }} />
+          <View style={{ height: 1, backgroundColor: theme.border, marginVertical: 15, marginHorizontal: 20 }} />
 
           {/* ================= SECCIÓN VENTAS (PRODUCTOS) ================= */}
           <View style={styles.sectionContainer}>
@@ -252,11 +268,11 @@ export default function HomeTab() {
             {/* Gráfico de Barras VENTAS */}
             <View style={[styles.chartContainer, { backgroundColor: theme.card }]}>
                 <View style={styles.chartHeader}>
-                    <MaterialCommunityIcons name="chart-bar" size={20} color={theme.text} />
-                    <Text style={[styles.chartTitle, { color: theme.text }]}>Ventas (Últimos 6 meses)</Text>
+                    <MaterialCommunityIcons name="chart-line" size={20} color={theme.text} />
+                    <Text style={[styles.chartTitle, { color: theme.text }]}>Tendencia de Ventas</Text>
                 </View>
                 
-                {chartReady ? renderBarChart(ventasChartValues, `rgba(255, 112, 67, 1)`) : (
+                {chartReady ? renderBarChart(ventasChartValues, '#FF7043') : (
                     <ActivityIndicator color={theme.primary} style={{ height: 220 }} />
                 )}
             </View>
@@ -264,8 +280,8 @@ export default function HomeTab() {
 
           {/* Banner Info */}
           <View style={[styles.infoBanner, { backgroundColor: isDark ? '#37474F' : '#FFF9C4' }]}>
-             <MaterialCommunityIcons name="lightbulb-on-outline" size={24} color={isDark ? '#FFD54F' : '#555'} />
-             <Text style={[styles.infoText, { color: isDark ? '#ECEFF1' : '#666' }]}>
+             <MaterialCommunityIcons name="lightbulb-on-outline" size={24} color={isDark ? '#FFD54F' : '#FBC02D'} />
+             <Text style={[styles.infoText, { color: isDark ? '#ECEFF1' : '#5D4037' }]}>
                 Recuerda: Los gráficos muestran la cantidad de operaciones realizadas cada mes.
              </Text>
           </View>
@@ -284,7 +300,7 @@ const styles = StyleSheet.create({
   dateText: { fontSize: 14, marginTop: 5 },
   
   sectionContainer: { marginBottom: 20 },
-  sectionHeader: { fontSize: 18, fontWeight: 'bold', marginHorizontal: 20, marginBottom: 10, marginTop: 10 },
+  sectionHeader: { fontSize: 18, fontWeight: 'bold', marginHorizontal: 20, marginBottom: 15, marginTop: 5 },
 
   statsContainer: { paddingHorizontal: 20, marginBottom: 15 },
   statCard: {
@@ -295,20 +311,20 @@ const styles = StyleSheet.create({
   iconBox: {
     width: 45, height: 45, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15
   },
-  statValue: { fontSize: 18, fontWeight: 'bold' }, // Ajustado un poco el tamaño
+  statValue: { fontSize: 18, fontWeight: 'bold' },
   statTitle: { fontSize: 12 },
 
   chartContainer: {
     marginHorizontal: 20, borderRadius: 16, padding: 15,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
     alignItems: 'center'
   },
-  chartHeader: { flexDirection: 'row', alignSelf: 'flex-start', marginBottom: 5, alignItems: 'center', gap: 8 },
-  chartTitle: { fontSize: 14, fontWeight: 'bold' },
+  chartHeader: { flexDirection: 'row', alignSelf: 'flex-start', marginBottom: 10, alignItems: 'center', gap: 8 },
+  chartTitle: { fontSize: 15, fontWeight: '700' },
 
   infoBanner: {
     margin: 20, padding: 15, borderRadius: 12,
-    flexDirection: 'row', alignItems: 'center', gap: 10
+    flexDirection: 'row', alignItems: 'center', gap: 12
   },
-  infoText: { flex: 1, fontSize: 13, lineHeight: 18 }
+  infoText: { flex: 1, fontSize: 13, lineHeight: 18, fontWeight: '500' }
 });
