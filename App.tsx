@@ -18,15 +18,32 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // 1. Obtener sesión inicial
     const getInitialSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      setLoading(false);
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) {
+          console.log("Sesión no válida:", error.message);
+          setSession(null);
+        } else {
+          setSession(session);
+        }
+      } catch (err) {
+        setSession(null);
+      } finally {
+        setLoading(false);
+      }
     };
+
     getInitialSession();
+
+    // 2. Escuchar cambios en tiempo real (Login, Logout, etc.)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      // CORRECCIÓN: Simplificamos la lógica.
+      // Supabase envía automáticamente la sesión como 'null' si el usuario sale o es eliminado.
       setSession(session);
     });
+
     return () => subscription.unsubscribe();
   }, []);
 
