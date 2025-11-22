@@ -14,6 +14,7 @@ import {
   Image
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import LottieView from 'lottie-react-native'; // <--- IMPORTANTE
 import { COLORES } from '../../constants/colors';
 import { supabase } from '../../lib/supabase';
 
@@ -53,9 +54,16 @@ export default function ClientDetailsModal({
   onAddPetPress 
 }: ClientDetailsModalProps) {
   
+  // Animación Modal Principal
   const scaleValue = useRef(new Animated.Value(0)).current;
+  
+  // Animación Modal Alerta
+  const alertScale = useRef(new Animated.Value(0)).current;
+
   const [deleting, setDeleting] = useState(false);
-  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  
+  // Estado para el nuevo modal de confirmación
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // 2. Usamos el tema
   const { theme, isDark } = useTheme();
@@ -65,9 +73,9 @@ export default function ClientDetailsModal({
   const [selectedPet, setSelectedPet] = useState<Mascota | null>(null);
   const [petDetailsVisible, setPetDetailsVisible] = useState(false);
 
+  // Efecto de entrada (Modal Principal)
   useEffect(() => {
     if (visible && cliente) {
-      setShowConfirmDelete(false);
       fetchMascotas(cliente.id);
       
       scaleValue.setValue(0);
@@ -79,6 +87,19 @@ export default function ClientDetailsModal({
       }).start();
     }
   }, [visible, cliente]);
+
+  // Efecto de rebote (Modal Alerta)
+  useEffect(() => {
+    if (showDeleteConfirm) {
+        alertScale.setValue(0);
+        Animated.spring(alertScale, {
+            toValue: 1,
+            friction: 5,
+            tension: 80,
+            useNativeDriver: true,
+        }).start();
+    }
+  }, [showDeleteConfirm]);
 
   const fetchMascotas = async (clienteId: number) => {
     setLoadingPets(true);
@@ -98,15 +119,20 @@ export default function ClientDetailsModal({
       setPetDetailsVisible(true);
   };
 
-  const handleDeletePress = () => setShowConfirmDelete(true);
+  const handleOpenDeleteAlert = () => {
+      setShowDeleteConfirm(true);
+  };
 
-  const confirmDelete = async () => {
+  const executeDelete = async () => {
     if (!cliente) return;
     setDeleting(true);
+    
+    // Llamamos a la prop onDelete que viene del padre
     await onDelete(cliente.id);
+    
     setDeleting(false);
-    setShowConfirmDelete(false);
-    onClose();
+    setShowDeleteConfirm(false);
+    onClose(); // Cerramos el modal principal también
   };
 
   if (!cliente) return null;
@@ -202,30 +228,57 @@ export default function ClientDetailsModal({
               <Text style={styles.addPetButtonText}>Agregar Mascota</Text>
             </TouchableOpacity>
 
-            {!showConfirmDelete ? (
-              <TouchableOpacity style={styles.deleteButton} onPress={handleDeletePress}>
+            <TouchableOpacity style={styles.deleteButton} onPress={handleOpenDeleteAlert}>
                  <MaterialCommunityIcons name="trash-can-outline" size={20} color={theme.danger} style={{ marginRight: 5 }} />
                  <Text style={[styles.deleteButtonText, { color: theme.danger }]}>Eliminar Cliente</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={[styles.confirmBox, { backgroundColor: isDark ? '#3a2a2a' : '#FFEBEE' }]}>
-                <Text style={[styles.confirmText, { color: theme.danger }]}>¿Seguro de eliminar?</Text>
-                <View style={styles.confirmButtons}>
-                  <TouchableOpacity 
-                    style={[styles.cancelDeleteBtn, { backgroundColor: theme.card }]} 
-                    onPress={() => setShowConfirmDelete(false)}
-                  >
-                    <Text style={{color: theme.text}}>No</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.confirmDeleteBtn} onPress={confirmDelete} disabled={deleting}>
-                    {deleting ? <ActivityIndicator color="white" size="small"/> : <Text style={{color: 'white', fontWeight: 'bold'}}>Sí</Text>}
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
+            </TouchableOpacity>
           </View>
 
         </Animated.View>
+
+        {/* --- MODAL DE ALERTA PERSONALIZADO (Igual que en productos) --- */}
+        <Modal visible={showDeleteConfirm} transparent animationType="fade">
+            <View style={styles.alertOverlay}>
+                <Animated.View style={[styles.alertBox, { transform: [{ scale: alertScale }], backgroundColor: theme.card }]}>
+                    
+                    <View style={styles.lottieContainer}>
+                        <LottieView
+                            source={require('../../assets/alert_anim.json')} 
+                            autoPlay
+                            loop={true}
+                            style={{ width: 80, height: 80 }}
+                        />
+                    </View>
+
+                    <Text style={[styles.alertTitle, { color: theme.text }]}>¿Eliminar Cliente?</Text>
+                    <Text style={[styles.alertMessage, { color: theme.textSecondary }]}>
+                        Se eliminará a "{cliente.nombres}" y todas sus mascotas y citas asociadas.
+                    </Text>
+
+                    <View style={styles.alertButtons}>
+                        <TouchableOpacity 
+                            style={[styles.alertBtnCancel, { backgroundColor: theme.inputBackground }]} 
+                            onPress={() => setShowDeleteConfirm(false)}
+                        >
+                            <Text style={{ color: theme.text, fontWeight: 'bold' }}>Cancelar</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity 
+                            style={styles.alertBtnConfirm} 
+                            onPress={executeDelete}
+                            disabled={deleting}
+                        >
+                            {deleting ? (
+                                <ActivityIndicator color="white" size="small" />
+                            ) : (
+                                <Text style={{ color: 'white', fontWeight: 'bold' }}>Eliminar</Text>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                </Animated.View>
+            </View>
+        </Modal>
+
       </KeyboardAvoidingView>
     </Modal>
 
@@ -284,12 +337,59 @@ const styles = StyleSheet.create({
   },
   addPetButtonText: { color: COLORES.textoSobrePrincipal, fontSize: 15, fontWeight: 'bold', marginLeft: 8 },
   
-  deleteButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
+  deleteButton: { 
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', 
+      paddingVertical: 12, borderRadius: 12, marginTop: 5 
+  },
   deleteButtonText: { fontSize: 14, fontWeight: '600' },
 
-  confirmBox: { alignItems: 'center', marginTop: 5, padding: 8, borderRadius: 10, width: '100%' },
-  confirmText: { fontWeight: 'bold', marginBottom: 5, fontSize: 13 },
-  confirmButtons: { flexDirection: 'row', gap: 10 },
-  cancelDeleteBtn: { paddingHorizontal: 15, paddingVertical: 4, borderRadius: 6 },
-  confirmDeleteBtn: { paddingHorizontal: 15, paddingVertical: 4, backgroundColor: COLORES.danger, borderRadius: 6 }
+  // --- ESTILOS ALERTA ---
+  alertOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  alertBox: {
+    width: width * 0.8,
+    borderRadius: 20,
+    padding: 25,
+    alignItems: 'center',
+    shadowColor: "#000", shadowOffset: {width:0, height:4}, shadowOpacity:0.3, elevation:10
+  },
+  lottieContainer: {
+    marginBottom: 15,
+  },
+  alertTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center'
+  },
+  alertMessage: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 25,
+    lineHeight: 20
+  },
+  alertButtons: {
+    flexDirection: 'row',
+    gap: 15,
+    width: '100%'
+  },
+  alertBtnCancel: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent'
+  },
+  alertBtnConfirm: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: '#D32F2F'
+  }
 });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Image } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { COLORES } from '../../constants/colors';
@@ -11,7 +11,10 @@ export default function TiendaTab() {
   const { theme } = useTheme();
   const [products, setProducts] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
+  
+  // Estados para modales
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<any>(null); // Producto a editar
   const [showPOS, setShowPOS] = useState(false);
 
   const fetchInventory = async () => {
@@ -26,6 +29,18 @@ export default function TiendaTab() {
     await fetchInventory();
     setRefreshing(false);
   }, []);
+
+  // Función para abrir modal en modo "Crear"
+  const handleCreateProduct = () => {
+    setSelectedProduct(null);
+    setShowProductModal(true);
+  };
+
+  // Función para abrir modal en modo "Editar"
+  const handleEditProduct = (product: any) => {
+    setSelectedProduct(product);
+    setShowProductModal(true);
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: 'transparent' }]}>
@@ -45,7 +60,7 @@ export default function TiendaTab() {
 
       <View style={styles.listHeader}>
         <Text style={[styles.sectionTitle, { color: theme.text }]}>Inventario</Text>
-        <TouchableOpacity onPress={() => setShowAddModal(true)} style={[styles.addBtn, { backgroundColor: theme.inputBackground }]}>
+        <TouchableOpacity onPress={handleCreateProduct} style={[styles.addBtn, { backgroundColor: theme.inputBackground }]}>
             <MaterialCommunityIcons name="plus" size={20} color={theme.primary} />
             <Text style={{ color: theme.primary, fontWeight: 'bold' }}>Producto</Text>
         </TouchableOpacity>
@@ -57,26 +72,46 @@ export default function TiendaTab() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
         contentContainerStyle={{ paddingBottom: 100 }}
         renderItem={({ item }) => (
-          <View style={[styles.card, { backgroundColor: theme.card }]}>
-            <View style={[styles.iconBg, { backgroundColor: theme.inputBackground }]}>
-                <MaterialCommunityIcons name="tag-outline" size={24} color={theme.primary} />
+          <TouchableOpacity 
+            style={[styles.card, { backgroundColor: theme.card }]} 
+            onPress={() => handleEditProduct(item)} // AHORA ES TOCABLE
+            activeOpacity={0.7}
+          >
+            <View style={[styles.imageContainer, { backgroundColor: theme.inputBackground }]}>
+                {item.foto_url ? (
+                    <Image source={{ uri: item.foto_url }} style={styles.productImage} />
+                ) : (
+                    <MaterialCommunityIcons name="tag-outline" size={24} color={theme.primary} />
+                )}
             </View>
+
             <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={[styles.prodName, { color: theme.text }]}>{item.nombre}</Text>
                 <Text style={{ color: theme.textSecondary, fontSize: 12 }}>{item.descripcion || 'Sin descripción'}</Text>
             </View>
+            
             <View style={{ alignItems: 'flex-end' }}>
                 <Text style={[styles.price, { color: theme.primary }]}>S/. {item.precio}</Text>
                 <Text style={{ color: item.stock < 5 ? COLORES.danger : theme.textSecondary, fontSize: 12, fontWeight: 'bold' }}>Stock: {item.stock}</Text>
             </View>
-          </View>
+            
+            {/* Flechita para indicar que es editable */}
+            <MaterialCommunityIcons name="chevron-right" size={20} color={theme.border} style={{ marginLeft: 8 }} />
+          </TouchableOpacity>
         )}
         ListEmptyComponent={
             <Text style={{ textAlign: 'center', marginTop: 50, color: theme.textSecondary }}>No hay productos registrados.</Text>
         }
       />
 
-      <AddProductModal visible={showAddModal} onClose={() => setShowAddModal(false)} onSuccess={fetchInventory} />
+      {/* Modal único que sirve para Crear o Editar */}
+      <AddProductModal 
+        visible={showProductModal} 
+        onClose={() => setShowProductModal(false)} 
+        onSuccess={fetchInventory} 
+        productToEdit={selectedProduct} // Pasamos el producto si es edición
+      />
+      
       <POSModal visible={showPOS} onClose={() => setShowPOS(false)} onSaleComplete={fetchInventory} />
     </View>
   );
@@ -102,7 +137,10 @@ const styles = StyleSheet.create({
   addBtn: { flexDirection: 'row', padding: 8, borderRadius: 8, alignItems: 'center', gap: 5 },
 
   card: { flexDirection: 'row', padding: 15, borderRadius: 12, marginBottom: 10, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.05, elevation: 2 },
-  iconBg: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  
+  imageContainer: { width: 50, height: 50, borderRadius: 10, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  productImage: { width: '100%', height: '100%' },
+
   prodName: { fontSize: 16, fontWeight: 'bold' },
   price: { fontSize: 16, fontWeight: 'bold' }
 });
