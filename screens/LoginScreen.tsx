@@ -11,20 +11,32 @@ import {
   Platform,
   ScrollView,
   Alert,
+  Dimensions,
+  ActivityIndicator
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import LottieView from 'lottie-react-native'; 
+import * as Animatable from 'react-native-animatable'; 
 import { COLORES } from '../constants/colors';
+
+// 1. Importar el contexto del tema
+import { useTheme } from '../context/ThemeContext';
+
+const { width, height } = Dimensions.get('window');
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  // 2. Usar los valores del tema
+  const { theme, isDark } = useTheme();
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Campos incompletos', 'Por favor ingresa tu correo y contraseña.');
+      Alert.alert('Atención', 'Por favor ingresa tu correo y contraseña.');
       return;
     }
 
@@ -36,92 +48,109 @@ export default function LoginScreen() {
     setLoading(false);
 
     if (error) {
-      if (error.message === 'Invalid login credentials') {
-        Alert.alert('Error', 'Correo o contraseña incorrectos.');
-      } else {
-        Alert.alert('Error al Ingresar', error.message);
-      }
+      Alert.alert('Error al Ingresar', 'Credenciales incorrectas o usuario no registrado.');
     }
   };
 
+  // Estilos dinámicos para inputs
+  const inputContainerStyle = {
+    backgroundColor: theme.card, // Blanco en light, Gris oscuro en dark
+    shadowColor: isDark ? "#000" : "#000", 
+    shadowOpacity: isDark ? 0.3 : 0.05, // Sombra más sutil en light
+  };
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORES.principal} />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+      {/* StatusBar se adapta automáticamente */}
+      <StatusBar 
+        barStyle={isDark ? "light-content" : "dark-content"} 
+        backgroundColor={theme.background} 
+      />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
+        style={[styles.container, { backgroundColor: theme.background }]}
       >
-        <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-          {/* Cabecera */}
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          
+          {/* 1. LOGO / ANIMACIÓN SUPERIOR */}
           <View style={styles.headerContainer}>
-            <LottieView
-              source={require('../assets/pet-animation.json')}
-              style={styles.lottieAnimation}
-              autoPlay
-              loop
-            />
-            <Text style={styles.headerTitle}>¡Hola!</Text>
-            <Text style={styles.headerSubtitle}>Bienvenido a Ohmypet</Text>
+            {/* Efecto de entrada: Zoom In */}
+            <Animatable.View animation="zoomIn" duration={1500} useNativeDriver>
+                <View style={[styles.lottieWrapper, { backgroundColor: theme.card, shadowColor: isDark ? '#000' : COLORES.principal }]}>
+                    <LottieView
+                        source={require('../assets/pet-animation.json')}
+                        style={styles.lottieAnimation}
+                        autoPlay
+                        loop
+                    />
+                </View>
+            </Animatable.View>
+            
+            <Animatable.Text animation="fadeInDown" delay={500} style={[styles.appName, { color: theme.primary }]}>
+              Ohmypet
+            </Animatable.Text>
           </View>
 
-          {/* Formulario */}
-          <View style={styles.formContainer}>
-            <Text style={styles.formTitle}>Login</Text>
-
-            {/* Input Email */}
-            <View style={styles.inputContainer}>
-              <MaterialCommunityIcons
-                name="email-outline"
-                size={22}
-                color={COLORES.textoSecundario}
-                style={styles.inputIcon}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Correo Electrónico"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                placeholderTextColor={COLORES.textoSecundario}
-                editable={!loading}
-              />
+          {/* 2. FORMULARIO (Entra desde abajo) */}
+          <Animatable.View 
+            animation="fadeInUp" 
+            delay={300} 
+            duration={1000} 
+            style={styles.formContainer}
+          >
+            
+            {/* Input Usuario */}
+            <View style={styles.inputWrapper}>
+                <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>CORREO ELECTRÓNICO</Text>
+                <TextInput
+                    style={[styles.input, inputContainerStyle, { color: theme.text }]}
+                    placeholder="ejemplo@correo.com"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    placeholderTextColor={theme.textSecondary}
+                />
             </View>
 
             {/* Input Contraseña */}
-            <View style={styles.inputContainer}>
-              <MaterialCommunityIcons
-                name="lock-outline"
-                size={22}
-                color={COLORES.textoSecundario}
-                style={styles.inputIcon}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Contraseña"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={true}
-                placeholderTextColor={COLORES.textoSecundario}
-                editable={!loading}
-              />
+            <View style={styles.inputWrapper}>
+                <Text style={[styles.inputLabel, { color: theme.textSecondary }]}>CONTRASEÑA</Text>
+                <View style={[styles.passwordContainer, inputContainerStyle]}>
+                    <TextInput
+                        style={[styles.inputPassword, { color: theme.text }]}
+                        placeholder="••••••••"
+                        value={password}
+                        onChangeText={setPassword}
+                        secureTextEntry={!showPassword}
+                        placeholderTextColor={theme.textSecondary}
+                    />
+                    <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+                        <MaterialCommunityIcons 
+                            name={showPassword ? "eye-off" : "eye"} 
+                            size={22} 
+                            color={theme.textSecondary} 
+                        />
+                    </TouchableOpacity>
+                </View>
             </View>
 
-            {/* Botón Ingresar */}
+            {/* Botón Login */}
             <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
+              style={[styles.loginButton, { backgroundColor: theme.primary, shadowColor: theme.primary }]}
               onPress={handleLogin}
               disabled={loading}
+              activeOpacity={0.8}
             >
-              <Text style={styles.buttonText}>
-                {loading ? 'Ingresando...' : 'Ingresar'}
-              </Text>
+              {loading ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text style={styles.loginButtonText}>Login</Text>
+              )}
             </TouchableOpacity>
 
-            {/* --- AQUÍ ELIMINAMOS EL BOTÓN DE REGISTRO --- */}
-            
-          </View>
+          </Animatable.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -131,93 +160,104 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: COLORES.principal,
   },
   container: {
     flex: 1,
-    backgroundColor: COLORES.fondoGris,
   },
-  headerContainer: {
-    backgroundColor: COLORES.principal,
-    paddingTop: 30,
-    paddingBottom: 50,
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
     paddingHorizontal: 30,
+    paddingBottom: 50,
+  },
+  
+  // --- HEADER ---
+  headerContainer: {
     alignItems: 'center',
-    borderBottomLeftRadius: 40,
-    borderBottomRightRadius: 40,
+    marginBottom: 50,
+    marginTop: 60,
   },
-  lottieAnimation: {
-    width: 250,
-    height: 250,
-    marginBottom: 0,
-  },
-  headerTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: COLORES.fondoBlanco,
-    textAlign: 'center',
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: COLORES.fondoBlanco,
-    opacity: 0.9,
-    textAlign: 'center',
-    marginTop: 5,
-  },
-  formContainer: {
-    flex: 1,
-    backgroundColor: COLORES.fondoBlanco,
-    borderTopLeftRadius: 40,
-    borderTopRightRadius: 40,
-    marginTop: -30,
-    padding: 30,
-    paddingTop: 40,
-  },
-  formTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: COLORES.texto,
-    marginBottom: 30,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORES.fondoGris,
-    borderRadius: 12,
-    marginBottom: 15,
-    height: 55,
-  },
-  inputIcon: {
-    marginLeft: 20,
-    marginRight: 10,
-  },
-  input: {
-    flex: 1,
-    height: '100%',
-    fontSize: 16,
-    color: COLORES.texto,
-    paddingRight: 15,
-  },
-  button: {
-    width: '100%',
-    height: 55,
-    backgroundColor: COLORES.principal,
-    borderRadius: 12,
+  lottieWrapper: {
+    width: 160,
+    height: 160,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4.65,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+    borderRadius: 80, 
   },
-  buttonText: {
-    color: COLORES.fondoBlanco,
-    fontSize: 18,
+  lottieAnimation: {
+    width: 120,
+    height: 120,
+  },
+  appName: {
+    fontSize: 28,
     fontWeight: 'bold',
+    marginTop: 20,
+    letterSpacing: 1,
   },
-  buttonDisabled: {
-    backgroundColor: COLORES.inactivo,
+
+  // --- FORMULARIO ---
+  formContainer: {
+    width: '100%',
+  },
+  inputWrapper: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    letterSpacing: 1,
+    marginLeft: 5,
+  },
+  input: {
+    borderRadius: 16,
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    fontSize: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 5,
+    elevation: 2,
+    borderWidth: 0, // Sin borde para estilo limpio
+  },
+  
+  // Contraseña
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  inputPassword: {
+    flex: 1,
+    paddingVertical: 15,
+    fontSize: 16,
+  },
+  eyeIcon: {
+    padding: 10,
+  },
+
+  // --- BOTONES ---
+  loginButton: {
+    borderRadius: 30, 
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 30,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  loginButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    letterSpacing: 1,
   },
 });
