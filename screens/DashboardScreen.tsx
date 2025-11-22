@@ -1,15 +1,24 @@
 import React, { useState } from 'react';
-import { StyleSheet, View, SafeAreaView, StatusBar, ImageBackground } from 'react-native';
+import { 
+  StyleSheet, 
+  View, 
+  SafeAreaView, 
+  StatusBar, 
+  ImageBackground, 
+  TouchableOpacity,
+  Platform 
+} from 'react-native';
 import { COLORES } from '../constants/colors';
 import * as Animatable from 'react-native-animatable';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 // Componentes de Pantallas
 import HomeTab from '../components/dashboard/HomeTab';
 import CitasTab from '../components/dashboard/CitasTab';
 import ClientesTab from '../components/dashboard/ClientesTab';
 import PerfilTab from '../components/dashboard/PerfilTab';
-import TiendaTab from '../components/dashboard/TiendaTab';     // <--- Importar Tienda
-import ServiciosTab from '../components/dashboard/ServiciosTab'; // <--- Importar Servicios
+import TiendaTab from '../components/dashboard/TiendaTab';
+import ServiciosTab from '../components/dashboard/ServiciosTab';
 
 // Componentes UI
 import BottomNavBar from '../components/ui/BottomNavBar';
@@ -19,12 +28,12 @@ import AddClientModal from '../components/modals/AddClientModal';
 import PetsListModal from '../components/modals/PetsListModal';
 import AddAppointmentModal from '../components/modals/AddAppointmentModal';
 import ReportsModal from '../components/modals/ReportsModal';
+import AIChatModal from '../components/modals/AIChatModal';
 
 // Hooks de Contexto
 import { useData } from '../context/DataContext';
 import { useTheme } from '../context/ThemeContext';
 
-// DEFINICIÓN DE TABS ACTUALIZADA
 type TabType = 'Home' | 'Citas' | 'Clientes' | 'Tienda' | 'Perfil' | 'Servicios';
 
 export default function DashboardScreen() {
@@ -36,6 +45,9 @@ export default function DashboardScreen() {
   const [petsModalVisible, setPetsModalVisible] = useState(false);
   const [reportsVisible, setReportsVisible] = useState(false);
   
+  // Estado IA
+  const [aiModalVisible, setAiModalVisible] = useState(false);
+  
   const { refreshClients, refreshAppointments } = useData();
   const { theme, isDark } = useTheme(); 
 
@@ -45,7 +57,6 @@ export default function DashboardScreen() {
     } else if (activeTab === 'Citas') {
       setAppointmentModalVisible(true);
     } else {
-      // Por defecto, si está en otra pestaña, abre agendar cita
       setAppointmentModalVisible(true);
     }
   };
@@ -60,6 +71,11 @@ export default function DashboardScreen() {
     setActiveTab('Citas');
   };
 
+  const handleAISuccess = () => {
+    refreshAppointments();
+    setActiveTab('Citas');
+  };
+
   const renderContent = () => {
     let contentComponent;
 
@@ -67,9 +83,9 @@ export default function DashboardScreen() {
       case 'Home': contentComponent = <HomeTab />; break;
       case 'Citas': contentComponent = <CitasTab />; break;
       case 'Clientes': contentComponent = <ClientesTab />; break;
-      case 'Tienda': contentComponent = <TiendaTab />; break;       // <--- Nuevo Tab
+      case 'Tienda': contentComponent = <TiendaTab />; break;
       case 'Perfil': contentComponent = <PerfilTab />; break;
-      case 'Servicios': contentComponent = <ServiciosTab />; break; // <--- Nuevo Tab
+      case 'Servicios': contentComponent = <ServiciosTab />; break;
       default: contentComponent = <HomeTab />; break;
     }
 
@@ -84,6 +100,13 @@ export default function DashboardScreen() {
         {contentComponent}
       </Animatable.View>
     );
+  };
+
+  // Estilos dinámicos para el botón de IA
+  const aiButtonStyle = {
+    backgroundColor: isDark ? '#7C4DFF' : theme.primary, // Violeta brillante en Dark, Verde Principal en Light
+    shadowColor: isDark ? '#7C4DFF' : theme.primary,
+    borderColor: theme.card,
   };
 
   return (
@@ -106,6 +129,35 @@ export default function DashboardScreen() {
           {renderContent()}
         </View>
       </ImageBackground>
+
+      {/* --- BOTÓN FLOTANTE IA MEJORADO --- */}
+      <Animatable.View 
+        animation="zoomIn" 
+        duration={600} 
+        delay={500}
+        style={styles.aiButtonContainer}
+      >
+        <TouchableOpacity 
+          style={[styles.aiButton, aiButtonStyle]}
+          onPress={() => setAiModalVisible(true)}
+          activeOpacity={0.8}
+        >
+          {/* Efecto de brillo sutil */}
+          <View style={styles.aiButtonShine} />
+          <MaterialCommunityIcons name="robot-happy-outline" size={32} color="white" />
+          
+          {/* Badge opcional "AI" */}
+          <View style={[styles.aiBadge, { backgroundColor: theme.card }]}>
+            <Animatable.Text 
+                animation="pulse" 
+                iterationCount="infinite" 
+                style={[styles.aiBadgeText, { color: isDark ? '#7C4DFF' : theme.primary }]}
+            >
+                IA
+            </Animatable.Text>
+          </View>
+        </TouchableOpacity>
+      </Animatable.View>
 
       <BottomNavBar 
         activeTab={activeTab} 
@@ -137,6 +189,12 @@ export default function DashboardScreen() {
         onClose={() => setReportsVisible(false)} 
       />
 
+      <AIChatModal 
+        visible={aiModalVisible} 
+        onClose={() => setAiModalVisible(false)} 
+        onSuccess={handleAISuccess}
+      />
+
     </SafeAreaView>
   );
 }
@@ -154,4 +212,50 @@ const styles = StyleSheet.create({
     flex: 1,
     marginBottom: 70, 
   },
+  
+  // --- ESTILOS NUEVOS DEL BOTÓN IA ---
+  aiButtonContainer: {
+    position: 'absolute',
+    bottom: 115, // Justo encima del NavBar
+    right: 20,
+    zIndex: 2000,
+  },
+  aiButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    // Sombras potentes para dar efecto flotante 3D
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 10,
+    borderWidth: 3, // Borde fino para separar del fondo
+  },
+  aiButtonShine: {
+    position: 'absolute',
+    top: 5,
+    right: 10,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.3)', // Reflejo de luz
+  },
+  aiBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    elevation: 11,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 2 }
+  },
+  aiBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+  }
 });
