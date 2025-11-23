@@ -4,6 +4,7 @@ import {
   TouchableWithoutFeedback, Dimensions 
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics'; // <--- IMPORTANTE: Librería de vibración
 import { COLORES } from '../../constants/colors';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -32,6 +33,9 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
   };
 
   const toggleMenu = () => {
+    // Efecto de vibración tipo "burbuja" (Medium es como un 'pop')
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
     const toValue = menuOpen ? 0 : 1;
     Animated.spring(animation, {
       toValue,
@@ -64,6 +68,8 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
       <TouchableOpacity 
         style={styles.tabItem} 
         onPress={() => {
+            // Pequeña vibración ligera al cambiar de tab (opcional, se siente bien)
+            if(Platform.OS === 'ios') Haptics.selectionAsync();
             if(menuOpen) toggleMenu();
             onTabChange(tabName);
         }}
@@ -133,7 +139,7 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
         <TabIcon name="account-group" label="Clientes" tabName="Clientes" />
       </View>
 
-      {/* BOTÓN + */}
+      {/* BOTÓN + CENTRAL */}
       <TouchableOpacity 
         style={[
             styles.floatingButton, 
@@ -141,11 +147,14 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
             { borderColor: theme.background }
         ]} 
         onPress={() => {
+            // Vibración ligera al toque normal también
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            
             if (menuOpen) toggleMenu();
             else if (activeTab === 'Home' || activeTab === 'Tienda' || activeTab === 'Perfil' || activeTab === 'Servicios') toggleMenu();
             else onAddClick();
         }}      
-        onLongPress={toggleMenu}
+        onLongPress={toggleMenu} // <--- AQUÍ SE EJECUTA LA VIBRACIÓN MÁS FUERTE AL MANTENER
         delayLongPress={300}
         activeOpacity={0.9}
       >
@@ -174,7 +183,6 @@ const styles = StyleSheet.create({
   bottomBar: {
     flexDirection: 'row', 
     width: '100%', 
-    // 1. Aumentamos la altura para que no se corte al subir el padding
     height: Platform.OS === 'ios' ? 90 : 70, 
     justifyContent: 'space-between', 
     alignItems: 'center', 
@@ -186,7 +194,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1, 
     shadowRadius: 3,
     elevation: 10, 
-    // 2. Aumentamos el padding inferior para separar los iconos de la "rayita"
     paddingBottom: Platform.OS === 'ios' ? 35 : 10,
   },
   tabItem: { alignItems: 'center', justifyContent: 'center', width: 55 },
@@ -194,7 +201,6 @@ const styles = StyleSheet.create({
   
   floatingButton: {
     position: 'absolute', 
-    // 3. Subimos el botón para que coincida con la nueva altura de la barra
     bottom: Platform.OS === 'ios' ? 45 : 35, 
     backgroundColor: COLORES.verdeBoton,
     width: 65, height: 65, borderRadius: 32.5,
@@ -206,7 +212,6 @@ const styles = StyleSheet.create({
   
   menuOption: { 
     position: 'absolute', 
-    // 4. Subimos el menú para que salga desde la nueva posición del botón
     bottom: Platform.OS === 'ios' ? 45 : 35, 
     zIndex: 101 
   },
