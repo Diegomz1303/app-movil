@@ -4,7 +4,7 @@ import {
   TouchableWithoutFeedback, Dimensions 
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics'; // <--- IMPORTANTE: Librería de vibración
+import * as Haptics from 'expo-haptics'; 
 import { COLORES } from '../../constants/colors';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -17,23 +17,23 @@ interface BottomNavBarProps {
   onTabChange: (tab: TabType) => void;
   onAddClick: () => void;     
   onPetsClick: () => void;
-  onReportsClick: () => void;
+  onCalendarClick: () => void;
 }
 
-export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPetsClick, onReportsClick }: BottomNavBarProps) {
+export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPetsClick, onCalendarClick }: BottomNavBarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const animation = useRef(new Animated.Value(0)).current;
   const { theme } = useTheme();
 
+  // CORRECCIÓN 1: Iconos específicos para que siempre se vean
   const getMainIcon = () => {
     if (menuOpen) return "close"; 
-    if (activeTab === 'Clientes') return "account-plus";
-    if (activeTab === 'Citas') return "calendar-plus";
-    return "plus"; 
+    if (activeTab === 'Clientes') return "account-plus"; // Icono para Clientes
+    if (activeTab === 'Citas') return "calendar-plus";   // Icono para Citas (antes no salía o era genérico)
+    return "plus"; // Icono por defecto (menú)
   };
 
   const toggleMenu = () => {
-    // Efecto de vibración tipo "burbuja" (Medium es como un 'pop')
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     const toValue = menuOpen ? 0 : 1;
@@ -68,7 +68,6 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
       <TouchableOpacity 
         style={styles.tabItem} 
         onPress={() => {
-            // Pequeña vibración ligera al cambiar de tab (opcional, se siente bien)
             if(Platform.OS === 'ios') Haptics.selectionAsync();
             if(menuOpen) toggleMenu();
             onTabChange(tabName);
@@ -90,7 +89,7 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
       
       {/* --- MENÚ FLOTANTE --- */}
 
-      {/* 1. Mi Perfil (Top) */}
+      {/* 4. Mi Perfil */}
       <Animated.View style={[styles.menuOption, getAnimatedStyle(4)]} pointerEvents={menuOpen ? 'auto' : 'none'}>
         <TouchableOpacity style={styles.optionButton} onPress={() => { toggleMenu(); onTabChange('Perfil'); }}>
           <Text style={[styles.optionLabel, { backgroundColor: theme.card, color: theme.text }]}>Mi Perfil</Text>
@@ -100,7 +99,7 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
         </TouchableOpacity>
       </Animated.View>
 
-      {/* 2. Servicios Realizados (Historial) */}
+      {/* 3. Servicios Realizados */}
       <Animated.View style={[styles.menuOption, getAnimatedStyle(3)]} pointerEvents={menuOpen ? 'auto' : 'none'}>
         <TouchableOpacity style={styles.optionButton} onPress={() => { toggleMenu(); onTabChange('Servicios'); }}>
           <Text style={[styles.optionLabel, { backgroundColor: theme.card, color: theme.text }]}>Servicios Realizados</Text>
@@ -110,7 +109,7 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
         </TouchableOpacity>
       </Animated.View>
 
-      {/* 3. Buscar Mascotas */}
+      {/* 2. Buscar Mascotas */}
       <Animated.View style={[styles.menuOption, getAnimatedStyle(2)]} pointerEvents={menuOpen ? 'auto' : 'none'}>
         <TouchableOpacity style={styles.optionButton} onPress={() => { toggleMenu(); onPetsClick(); }}>
           <Text style={[styles.optionLabel, { backgroundColor: theme.card, color: theme.text }]}>Buscar Mascotas</Text>
@@ -120,12 +119,12 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
         </TouchableOpacity>
       </Animated.View>
 
-      {/* 4. Reportes */}
+      {/* 1. Ver Calendario */}
       <Animated.View style={[styles.menuOption, getAnimatedStyle(1)]} pointerEvents={menuOpen ? 'auto' : 'none'}>
-        <TouchableOpacity style={styles.optionButton} onPress={() => { toggleMenu(); onReportsClick(); }}>
-          <Text style={[styles.optionLabel, { backgroundColor: theme.card, color: theme.text }]}>Reportes</Text>
-          <View style={[styles.optionIcon, { backgroundColor: theme.isDark ? '#003c8f' : '#E3F2FD' }]}>
-            <MaterialCommunityIcons name="chart-bar" size={20} color={theme.isDark ? '#90caf9' : '#1976D2'} />
+        <TouchableOpacity style={styles.optionButton} onPress={() => { toggleMenu(); onCalendarClick(); }}>
+          <Text style={[styles.optionLabel, { backgroundColor: theme.card, color: theme.text }]}>Ver Calendario</Text>
+          <View style={[styles.optionIcon, { backgroundColor: theme.inputBackground }]}>
+            <MaterialCommunityIcons name="calendar-month" size={20} color={theme.primary} />
           </View>
         </TouchableOpacity>
       </Animated.View>
@@ -147,14 +146,20 @@ export default function BottomNavBar({ activeTab, onTabChange, onAddClick, onPet
             { borderColor: theme.background }
         ]} 
         onPress={() => {
-            // Vibración ligera al toque normal también
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             
-            if (menuOpen) toggleMenu();
-            else if (activeTab === 'Home' || activeTab === 'Tienda' || activeTab === 'Perfil' || activeTab === 'Servicios') toggleMenu();
-            else onAddClick();
+            if (menuOpen) {
+                toggleMenu();
+            } 
+            // CORRECCIÓN 2: Habilitar acción directa para "Citas" Y "Clientes"
+            else if (activeTab === 'Citas' || activeTab === 'Clientes') {
+                onAddClick(); 
+            }
+            else {
+                toggleMenu();
+            }
         }}      
-        onLongPress={toggleMenu} // <--- AQUÍ SE EJECUTA LA VIBRACIÓN MÁS FUERTE AL MANTENER
+        onLongPress={toggleMenu} 
         delayLongPress={300}
         activeOpacity={0.9}
       >

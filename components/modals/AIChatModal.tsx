@@ -1,312 +1,489 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, 
-  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView 
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Modal, View, Text, TextInput, TouchableOpacity, StyleSheet,
+  ActivityIndicator, Alert, Platform, KeyboardAvoidingView,
+  TouchableWithoutFeedback, FlatList, Animated, Dimensions
 } from 'react-native';
+import { Audio } from 'expo-av';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Audio } from 'expo-av'; 
-import * as Animatable from 'react-native-animatable';
+import LottieView from 'lottie-react-native';
+import * as Haptics from 'expo-haptics';
 
 import { useTheme } from '../../context/ThemeContext';
+import { COLORES } from '../../constants/colors';
 import { procesarTextoCita, transcribirAudio } from '../../lib/gemini';
 import { supabase } from '../../lib/supabase';
 
-export default function AIChatModal({ visible, onClose, onSuccess }: any) {
-  const { theme } = useTheme();
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [confirming, setConfirming] = useState(false); 
-  const [aiResponse, setAiResponse] = useState<any>(null);
-  const [posiblesMascotas, setPosiblesMascotas] = useState<any[]>([]);
+const { width, height } = Dimensions.get('window');
 
-  // Estados de Grabación
+// --- ESTRUCTURAS DE DATOS ---
+interface ChatMessage {
+  id: string;
+  text: string;
+  sender: 'user' | 'ai';
+  type?: 'text' | 'audio_placeholder' | 'thinking' | 'options';
+  options?: any[]; 
+}
+
+interface AIChatModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+export default function AIChatModal({ visible, onClose, onSuccess }: AIChatModalProps) {
+  const { theme, isDark } = useTheme();
+  
+  // Animación de Rebote (Spring)
+  const scaleValue = useRef(new Animated.Value(0)).current;
+
+  // Estados Audio
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
+  const [permissionResponse, requestPermission] = Audio.usePermissions();
+  
+  // Estados Lógica
+  const [processing, setProcessing] = useState(false);
+  const [appointmentData, setAppointmentData] = useState<any>(null);
+  
+  // Estados Chat
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [inputText, setInputText] = useState('');
+  
+  const flatListRef = useRef<FlatList>(null);
+  const animationRef = useRef<LottieView>(null);
 
-  // Pedir permisos al abrir
+  // Efecto de Entrada (Rebote) y Reset
   useEffect(() => {
-    (async () => {
-      if(visible) await Audio.requestPermissionsAsync();
-    })();
+    if (visible) {
+      // 1. Resetear estados
+      setMessages([{
+        id: 'welcome',
+        // CORRECCIÓN DE NOMBRE AQUÍ:
+        text: '¡Hola! 🤖 Bienvenido a OhMyPet. Dime algo como: "Agendar cita para Bobby mañana a las 10 para baño".',
+        sender: 'ai'
+      }]);
+      setAppointmentData(null);
+      setInputText('');
+      setProcessing(false);
+
+      // 2. Animar entrada
+      scaleValue.setValue(0);
+      Animated.spring(scaleValue, {
+        toValue: 1,
+        friction: 6,
+        tension: 50,
+        useNativeDriver: true,
+      }).start();
+    }
   }, [visible]);
 
-  // 1. Lógica de IA (Centralizada para reusar)
-  const procesarConIA = async (texto: string) => {
-    if (!texto.trim()) return;
-    
-    setLoading(true);
-    setAiResponse(null); 
-    setPosiblesMascotas([]);
-    
-    try {
-      // Enviamos el texto a Groq (Llama 3)
-      const resultado = await procesarTextoCita(texto);
-      console.log("Resultado IA:", resultado);
-      setAiResponse(resultado);
-    } catch (e) {
-      Alert.alert("Error", "No pude procesar tu solicitud.");
-    } finally {
-      setLoading(false);
+  // Scroll automático
+  useEffect(() => {
+    if (flatListRef.current && messages.length > 0) {
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200);
     }
-  };
+  }, [messages]);
 
-  // 2. Manejo del botón enviar (texto manual)
-  const handleSend = () => procesarConIA(input);
+  // Animación Lottie al grabar
+  useEffect(() => {
+    if (recording && animationRef.current) animationRef.current.play();
+    else if (animationRef.current) animationRef.current.reset();
+   }, [recording]);
 
-  // 3. Lógica de Grabación de Voz
-  const startRecording = async () => {
+  // --- AUDIO ---
+  async function startRecording() {
     try {
-      // Configuración de audio para alta calidad (necesaria para Whisper)
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
+        if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        if (permissionResponse?.status !== 'granted') await requestPermission();
 
-      const { recording } = await Audio.Recording.createAsync( 
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      setRecording(recording);
-      setIsRecording(true);
+        await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+
+        // Burbuja temporal
+        addMessage('...', 'user', 'audio_placeholder');
+
+        const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+        setRecording(recording);
     } catch (err) {
-      console.error('Error al iniciar grabación', err);
+        Alert.alert('Error', 'No se pudo iniciar el micrófono.');
+        setMessages(prev => prev.filter(m => m.type !== 'audio_placeholder'));
     }
-  };
+  }
 
-  const stopRecording = async () => {
+  async function stopRecording() {
     if (!recording) return;
-    
-    setIsRecording(false);
-    await recording.stopAndUnloadAsync();
-    const uri = recording.getURI(); 
+    if (Platform.OS === 'ios') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
     setRecording(null);
+    await recording.stopAndUnloadAsync();
+    const uri = recording.getURI();
 
-    if (uri) {
-      setLoading(true);
-      
-      // A. Transcribir audio con Groq Whisper
-      const textoTranscrito = await transcribirAudio(uri);
-      
-      if (textoTranscrito) {
-        // Mostramos lo que entendió
-        setInput(textoTranscrito); 
-        
-        // B. ¡MAGIA! Procesamos AUTOMÁTICAMENTE sin esperar clic
-        await procesarConIA(textoTranscrito);
-        
-      } else {
-        setLoading(false);
-        Alert.alert("Error", "No pude escuchar bien, intenta de nuevo.");
-      }
-    }
-  };
+    if (uri) processAudioFlow(uri);
+  }
 
-  // 4. Lógica de Base de Datos (Buscar mascota)
-  const buscarYConfirmar = async () => {
-    if (!aiResponse?.datos?.nombre_mascota) {
-      Alert.alert("Faltan datos", "No detecté el nombre de la mascota.");
-      return;
-    }
-    setConfirming(true);
-    const { nombre_mascota } = aiResponse.datos;
+  // --- FLUJO PRINCIPAL ---
+  const processAudioFlow = async (audioUri: string) => {
+    setProcessing(true);
+    setMessages(prev => prev.map(m => m.type === 'audio_placeholder' ? { ...m, text: 'Escuchando...', type: 'thinking' } : m));
 
     try {
-      const { data: mascotas, error: searchError } = await supabase
-        .from('mascotas')
-        .select(`
-            id, cliente_id, nombre, raza, 
-            clientes (nombres, apellidos)
-        `)
-        .ilike('nombre', `%${nombre_mascota}%`);
+      const textoTranscrito = await transcribirAudio(audioUri);
+      
+      setMessages(prev => prev.filter(m => m.type !== 'thinking')); 
 
-      if (searchError) throw searchError;
-
-      if (!mascotas || mascotas.length === 0) {
-        Alert.alert("No encontrada", `No encontré a "${nombre_mascota}".`);
-        setConfirming(false);
-        return;
+      if (!textoTranscrito) {
+          addMessage("No pude escuchar nada. Intenta de nuevo.", 'ai');
+          return;
       }
 
-      if (mascotas.length === 1) {
-        await finalizarAgendamiento(mascotas[0]);
-      } else {
-        setPosiblesMascotas(mascotas);
-        setConfirming(false);
-      }
+      addMessage(textoTranscrito, 'user');
+      await processTextFlow(textoTranscrito);
 
-    } catch (error: any) {
-      console.error(error);
-      Alert.alert("Error", "Error al buscar en la base de datos.");
-      setConfirming(false);
-    }
-  };
-
-  // 5. Guardar Cita Final
-  const finalizarAgendamiento = async (mascota: any) => {
-    setConfirming(true);
-    const { fecha, hora, servicio } = aiResponse.datos;
-
-    try {
-        const { error: insertError } = await supabase
-            .from('citas')
-            .insert({
-            mascota_id: mascota.id,
-            cliente_id: mascota.cliente_id,
-            fecha: fecha,
-            hora: hora,
-            servicio: servicio,
-            estado: 'pendiente',
-            notas: 'Agendado por Voz 🎙️'
-            });
-
-        if (insertError) throw insertError;
-
-        Alert.alert("¡Éxito!", `Cita agendada para ${mascota.nombre}.`);
-        onSuccess(); 
-        cerrarTodo();
-
-    } catch (err: any) {
-        Alert.alert("Error", err.message);
+    } catch (error) {
+      setMessages(prev => prev.filter(m => m.type !== 'thinking'));
+      addMessage("Error técnico al procesar el audio.", 'ai');
     } finally {
-        setConfirming(false);
+      setProcessing(false);
     }
   };
 
-  const cerrarTodo = () => {
-      onClose();
-      setInput('');
-      setAiResponse(null);
-      setPosiblesMascotas([]);
+  const handleSendText = async () => {
+      if(!inputText.trim()) return;
+      const text = inputText;
+      setInputText('');
+      addMessage(text, 'user');
+      setProcessing(true);
+      await processTextFlow(text);
+      setProcessing(false);
+  };
+
+  const processTextFlow = async (text: string) => {
+      const loadingId = Date.now().toString();
+      setMessages(prev => [...prev, { id: loadingId, text: '...', sender: 'ai', type: 'thinking' }]);
+
+      try {
+          const result = await procesarTextoCita(text);
+          setMessages(prev => prev.filter(m => m.id !== loadingId));
+
+          if (result.intent === 'agendar' && result.datos) {
+              if (result.datos.nombre_mascota) {
+                  await buscarMascotaEnBD(result.datos, result.respuesta_natural);
+              } else {
+                  addMessage(result.respuesta_natural || "Faltan datos. ¿Cuál es el nombre de la mascota?", 'ai');
+              }
+          } else {
+              addMessage(result.respuesta_natural || "No entendí muy bien. ¿Podrías repetir?", 'ai');
+          }
+
+      } catch (e) {
+          setMessages(prev => prev.filter(m => m.id !== loadingId));
+          addMessage("Tuve un problema conectando con el cerebro de la IA.", 'ai');
+      }
+  };
+
+  // --- LÓGICA DE DUPLICADOS Y BÚSQUEDA ---
+  const buscarMascotaEnBD = async (datosIA: any, respuestaIA: string) => {
+      if(!datosIA.nombre_mascota) return;
+
+      const { data: mascotas, error } = await supabase
+          .from('mascotas')
+          .select('id, nombre, raza, cliente_id, clientes (nombres, apellidos)')
+          .ilike('nombre', `%${datosIA.nombre_mascota}%`);
+
+      if (error || !mascotas || mascotas.length === 0) {
+          addMessage(`No encontré ninguna mascota llamada "${datosIA.nombre_mascota}". ¿Es un cliente nuevo?`, 'ai');
+          return;
+      }
+
+      // CASO 1: Solo una coincidencia
+      if (mascotas.length === 1) {
+          const mascota = mascotas[0];
+          addMessage(respuestaIA || `Entendido, agendando para ${mascota.nombre}.`, 'ai');
+          
+          const clienteInfo = mascota.clientes 
+            ? `${(mascota.clientes as any).nombres} ${(mascota.clientes as any).apellidos}` 
+            : 'Sin dueño';
+
+          setAppointmentData({
+              ...datosIA,
+              mascota_id: mascota.id,
+              cliente_id: mascota.cliente_id,
+              nombre_mascota: mascota.nombre, 
+              cliente_nombre: clienteInfo,
+              requiresConfirmation: true
+          });
+      
+      // CASO 2: Múltiples coincidencias
+      } else {
+          addMessage(`Encontré ${mascotas.length} mascotas llamadas "${datosIA.nombre_mascota}". ¿A cuál te refieres?`, 'ai');
+          
+          setMessages(prev => [...prev, {
+              id: Date.now().toString(),
+              text: 'Selecciona una mascota:',
+              sender: 'ai',
+              type: 'options',
+              options: mascotas.map(m => {
+                  const owner = m.clientes 
+                    ? `Dueño: ${(m.clientes as any).nombres} ${(m.clientes as any).apellidos}` 
+                    : 'Sin dueño';
+                  
+                  return {
+                    id: m.id,
+                    label: `${m.nombre} (${m.raza})`,
+                    subLabel: owner,
+                    originalData: m
+                  };
+              })
+          }]);
+      }
+  };
+
+  const handleSelectDuplicate = (mascotaBD: any, datosPreviosIA: any) => {
+      const ownerName = mascotaBD.clientes 
+        ? (mascotaBD.clientes as any).nombres 
+        : 'sin dueño';
+
+      addMessage(`El de ${ownerName}.`, 'user');
+      
+      const clienteFullName = mascotaBD.clientes 
+        ? `${(mascotaBD.clientes as any).nombres} ${(mascotaBD.clientes as any).apellidos}` 
+        : 'Sin dueño';
+
+      setAppointmentData({
+          ...datosPreviosIA,
+          mascota_id: mascotaBD.id,
+          cliente_id: mascotaBD.cliente_id,
+          nombre_mascota: mascotaBD.nombre,
+          cliente_nombre: clienteFullName,
+          requiresConfirmation: true
+      });
+  };
+
+  // --- GUARDAR EN BD ---
+  const handleConfirmSave = async () => {
+      if(!appointmentData?.mascota_id) return;
+      
+      setProcessing(true);
+      try {
+          const { error } = await supabase.from('citas').insert({
+              mascota_id: appointmentData.mascota_id,
+              cliente_id: appointmentData.cliente_id,
+              fecha: appointmentData.fecha,
+              hora: appointmentData.hora,
+              servicio: appointmentData.servicio,
+              estado: 'pendiente',
+              notas: 'Agendado por IA'
+          });
+
+          if(error) throw error;
+
+          addMessage("¡Listo! Cita agendada. ✅", 'ai');
+          setAppointmentData(null);
+          if (Platform.OS === 'ios') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          
+          setTimeout(() => {
+              onSuccess();
+              onClose();
+          }, 1500);
+      } catch (e) {
+          Alert.alert("Error", "No se pudo guardar la cita.");
+      } finally {
+          setProcessing(false);
+      }
+  };
+
+  const addMessage = (text: string, sender: 'user' | 'ai', type: any = 'text') => {
+      setMessages(prev => [...prev, { id: Date.now().toString(), text, sender, type }]);
+  };
+
+  // --- RENDERIZADO ---
+  const renderItem = ({ item }: { item: ChatMessage }) => {
+      if (item.type === 'thinking' || item.type === 'audio_placeholder') {
+          return (
+            <View style={[styles.bubbleWrap, item.sender === 'user' ? styles.userWrap : styles.aiWrap]}>
+                <View style={[styles.bubble, { backgroundColor: item.sender === 'user' ? theme.primary : theme.inputBackground }]}>
+                    <ActivityIndicator size="small" color={item.sender === 'user' ? 'white' : theme.text} />
+                </View>
+            </View>
+          );
+      }
+
+      if (item.type === 'options' && item.options) {
+          return (
+              <View style={styles.optionsContainer}>
+                  <Text style={[styles.optionsTitle, { color: theme.textSecondary }]}>{item.text}</Text>
+                  {item.options.map((opt, idx) => (
+                      <TouchableOpacity 
+                          key={idx} 
+                          style={[styles.optionBtn, { backgroundColor: theme.card, borderColor: theme.primary }]}
+                          onPress={() => {
+                              handleSelectDuplicate(opt.originalData, { 
+                                  fecha: new Date().toISOString().split('T')[0],
+                                  hora: '09:00',
+                                  servicio: 'Baño' 
+                              });
+                          }}
+                      >
+                          <Text style={[styles.optionLabel, { color: theme.text }]}>{opt.label}</Text>
+                          <Text style={[styles.optionSub, { color: theme.textSecondary }]}>{opt.subLabel}</Text>
+                      </TouchableOpacity>
+                  ))}
+              </View>
+          );
+      }
+
+      return (
+          <View style={[styles.bubbleWrap, item.sender === 'user' ? styles.userWrap : styles.aiWrap]}>
+              {item.sender === 'ai' && (
+                  <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
+                      <MaterialCommunityIcons name="robot" size={16} color="white" />
+                  </View>
+              )}
+              <View style={[
+                  styles.bubble, 
+                  item.sender === 'user' 
+                    ? { backgroundColor: theme.primary, borderBottomRightRadius: 2 } 
+                    : { backgroundColor: theme.inputBackground, borderBottomLeftRadius: 2 }
+              ]}>
+                  <Text style={{ color: item.sender === 'user' ? 'white' : theme.text, fontSize: 15 }}>{item.text}</Text>
+              </View>
+          </View>
+      );
+  };
+
+  const renderConfirmation = () => {
+      if(!appointmentData || !appointmentData.requiresConfirmation) return null;
+      return (
+          <Animated.View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <View style={styles.cardHeader}>
+                  <Text style={[styles.cardTitle, { color: theme.text }]}>Confirmar Datos</Text>
+                  <MaterialCommunityIcons name="check-decagram" size={20} color={theme.primary} />
+              </View>
+              
+              <View style={{gap: 8, marginBottom: 15}}>
+                  <Text style={{color: theme.textSecondary}}>🐶 Mascota: <Text style={{fontWeight:'bold', color: theme.text}}>{appointmentData.nombre_mascota}</Text></Text>
+                  <Text style={{color: theme.textSecondary}}>👤 Dueño: <Text style={{fontWeight:'bold', color: theme.text}}>{appointmentData.cliente_nombre}</Text></Text>
+                  <Text style={{color: theme.textSecondary}}>📅 Fecha: <Text style={{fontWeight:'bold', color: theme.text}}>{appointmentData.fecha}</Text></Text>
+                  <Text style={{color: theme.textSecondary}}>⏰ Hora: <Text style={{fontWeight:'bold', color: theme.text}}>{appointmentData.hora}</Text></Text>
+                  <Text style={{color: theme.textSecondary}}>✂️ Servicio: <Text style={{fontWeight:'bold', color: theme.text}}>{appointmentData.servicio}</Text></Text>
+              </View>
+
+              <View style={{flexDirection: 'row', gap: 10}}>
+                  <TouchableOpacity style={[styles.btn, {borderColor: theme.border, borderWidth: 1}]} onPress={() => { setAppointmentData(null); addMessage("Cancelado.", 'ai'); }}>
+                      <Text style={{color: theme.textSecondary}}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.btn, {backgroundColor: theme.primary}]} onPress={handleConfirmSave}>
+                      <Text style={{color: 'white', fontWeight: 'bold'}}>Confirmar</Text>
+                  </TouchableOpacity>
+              </View>
+          </Animated.View>
+      );
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={cerrarTodo}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.overlay}>
-        <View style={[styles.container, { backgroundColor: theme.card }]}>
-          
-          <View style={styles.header}>
-            <View style={{flexDirection:'row', alignItems:'center', gap: 10}}>
-                <MaterialCommunityIcons name="robot" size={24} color={theme.primary} />
-                <Text style={[styles.title, { color: theme.text }]}>Asistente de Voz</Text>
-            </View>
-            <TouchableOpacity onPress={cerrarTodo}>
-                <MaterialCommunityIcons name="close" size={24} color={theme.textSecondary} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.chatArea} contentContainerStyle={{paddingBottom: 20}}>
-            {!aiResponse && !loading ? (
-              <View style={styles.emptyState}>
-                  {/* Animación visual al grabar */}
-                  {isRecording ? (
-                    <Animatable.View animation="pulse" iterationCount="infinite" style={styles.recordingCircle}>
-                        <MaterialCommunityIcons name="microphone" size={50} color="white" />
-                    </Animatable.View>
-                  ) : (
-                    <MaterialCommunityIcons name="microphone-outline" size={60} color={theme.border} />
-                  )}
-                  
-                  <Text style={{ color: theme.textSecondary, textAlign: 'center', marginTop: 20 }}>
-                    {isRecording ? "Escuchando... (Suelta para procesar)" : "Mantén presionado el micro para hablar"}
-                  </Text>
-              </View>
-            ) : (
-              <View>
-                {/* Si está cargando la IA */}
-                {loading && !aiResponse && (
-                    <ActivityIndicator size="large" color={theme.primary} style={{marginTop: 20}} />
-                )}
-
-                {/* Respuesta IA */}
-                {aiResponse && (
-                    <>
-                        <View style={[styles.msgBubble, { backgroundColor: theme.inputBackground }]}>
-                            <Text style={[styles.aiMsg, { color: theme.text }]}>{aiResponse.respuesta_natural}</Text>
-                        </View>
-                        
-                        {/* Tarjeta de Confirmación */}
-                        {aiResponse.intent === 'agendar' && posiblesMascotas.length === 0 && (
-                        <View style={[styles.previewCard, { borderColor: theme.primary, backgroundColor: theme.card }]}>
-                            <Text style={[styles.cardTitle, { color: theme.primary }]}>Datos Detectados:</Text>
-                            <Text style={{color: theme.text}}>🐶 {aiResponse.datos.nombre_mascota}</Text>
-                            <Text style={{color: theme.text}}>📅 {aiResponse.datos.fecha} - ⏰ {aiResponse.datos.hora}</Text>
-                            <Text style={{color: theme.text}}>✂️ {aiResponse.datos.servicio}</Text>
-                            
-                            <TouchableOpacity style={[styles.btnConfirm, { backgroundColor: theme.primary }]} onPress={buscarYConfirmar} disabled={confirming}>
-                            {confirming ? <ActivityIndicator color="white" /> : <Text style={{ color: 'white', fontWeight: 'bold' }}>Confirmar</Text>}
-                            </TouchableOpacity>
-                        </View>
-                        )}
-
-                        {/* Lista de Duplicados */}
-                        {posiblesMascotas.length > 0 && (
-                            <View style={[styles.previewCard, { borderColor: 'orange' }]}>
-                                <Text style={[styles.cardTitle, { color: 'orange' }]}>Selecciona la mascota correcta:</Text>
-                                {posiblesMascotas.map((pet) => (
-                                    <TouchableOpacity key={pet.id} style={[styles.duplicateItem, { backgroundColor: theme.inputBackground }]} onPress={() => finalizarAgendamiento(pet)}>
-                                        <Text style={{fontWeight:'bold', color: theme.text}}>{pet.nombre} <Text style={{fontWeight:'normal', fontSize:12}}>({pet.clientes?.nombres})</Text></Text>
-                                        <MaterialCommunityIcons name="chevron-right" size={20} color={theme.textSecondary} />
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        )}
-                    </>
-                )}
-              </View>
-            )}
-          </ScrollView>
-
-          {/* BARRA DE ENTRADA */}
-          <View style={[styles.inputRow, { borderTopColor: theme.border }]}>
-            <TextInput 
-              style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
-              placeholder="Escribe o habla..."
-              placeholderTextColor={theme.textSecondary}
-              value={input}
-              onChangeText={setInput}
-              onSubmitEditing={handleSend}
-            />
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
+            <TouchableWithoutFeedback onPress={onClose}><View style={styles.backdrop} /></TouchableWithoutFeedback>
             
-            {input.length > 0 ? (
-               <TouchableOpacity style={[styles.sendBtn, { backgroundColor: theme.primary }]} onPress={handleSend}>
-                  <MaterialCommunityIcons name="send" size={20} color="white" />
-               </TouchableOpacity>
-            ) : (
-               // BOTÓN MICROFONO (Lógica: Press In -> Graba, Press Out -> Envía Automáticamente)
-               <TouchableOpacity 
-                  style={[styles.micBtn, { backgroundColor: isRecording ? '#F44336' : theme.primary }]} 
-                  onPressIn={startRecording}
-                  onPressOut={stopRecording}
-                  activeOpacity={0.8}
-               >
-                  <MaterialCommunityIcons name={isRecording ? "stop" : "microphone"} size={24} color="white" />
-               </TouchableOpacity>
-            )}
-          </View>
+            {/* Modal con Animación de Rebote */}
+            <Animated.View style={[
+                styles.modalView, 
+                { 
+                    backgroundColor: theme.background,
+                    transform: [{ scale: scaleValue }] 
+                }
+            ]}>
+                {/* Header */}
+                <View style={[styles.header, { borderBottomColor: theme.border }]}>
+                    <View style={{flexDirection:'row', alignItems:'center', gap:10}}>
+                        <MaterialCommunityIcons name="robot-happy-outline" size={24} color={theme.primary} />
+                        <Text style={[styles.title, { color: theme.text }]}>Asistente IA</Text>
+                    </View>
+                    <TouchableOpacity onPress={onClose}><MaterialCommunityIcons name="close" size={24} color={theme.textSecondary}/></TouchableOpacity>
+                </View>
 
-        </View>
-      </KeyboardAvoidingView>
+                {/* Chat Area */}
+                <FlatList
+                    ref={flatListRef}
+                    data={messages}
+                    keyExtractor={item => item.id}
+                    renderItem={renderItem}
+                    contentContainerStyle={{ padding: 15, paddingBottom: 20 }}
+                    ListFooterComponent={renderConfirmation}
+                />
+
+                {/* Input Area */}
+                <View style={[styles.inputContainer, { backgroundColor: theme.card, borderTopColor: theme.border }]}>
+                    <TextInput 
+                        style={[styles.input, { backgroundColor: theme.inputBackground, color: theme.text }]}
+                        placeholder="Escribe o usa el micrófono..."
+                        placeholderTextColor={theme.textSecondary}
+                        value={inputText}
+                        onChangeText={setInputText}
+                        onSubmitEditing={handleSendText}
+                    />
+                    
+                    {inputText.length > 0 ? (
+                        <TouchableOpacity style={[styles.circleBtn, { backgroundColor: theme.primary }]} onPress={handleSendText}>
+                            <MaterialCommunityIcons name="send" size={20} color="white" />
+                        </TouchableOpacity>
+                    ) : (
+                        <TouchableOpacity 
+                            style={[styles.circleBtn, { backgroundColor: recording ? COLORES.danger : theme.primary }]}
+                            onPressIn={startRecording}
+                            onPressOut={stopRecording}
+                        >
+                            {recording ? (
+                                <LottieView source={require('../../assets/pet-animation.json')} autoPlay loop style={{width: 30, height: 30}} />
+                            ) : (
+                                <MaterialCommunityIcons name="microphone" size={24} color="white" />
+                            )}
+                        </TouchableOpacity>
+                    )}
+                </View>
+            </Animated.View>
+        </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.6)' },
-  container: { height: '65%', borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 20, paddingBottom: 30 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15, alignItems: 'center' },
-  title: { fontSize: 20, fontWeight: 'bold' },
-  chatArea: { flex: 1 },
-  emptyState: { alignItems: 'center', justifyContent: 'center', marginTop: 40, opacity: 0.8 },
-  recordingCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#F44336', justifyContent: 'center', alignItems: 'center', elevation: 5, marginBottom: 10 },
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
   
-  msgBubble: { padding: 15, borderRadius: 15, borderBottomLeftRadius: 0, marginBottom: 15 },
-  aiMsg: { fontSize: 16, lineHeight: 22 },
-  previewCard: { borderWidth: 2, borderRadius: 15, padding: 15, gap: 5, elevation: 2, marginBottom: 20 },
-  cardTitle: { fontWeight: 'bold', marginBottom: 5, fontSize: 14 },
-  btnConfirm: { padding: 14, borderRadius: 12, alignItems: 'center', marginTop: 15 },
-  duplicateItem: { flexDirection: 'row', justifyContent:'space-between', alignItems:'center', padding: 12, borderRadius: 8, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)' },
+  // Estilo Modal "Card" con rebote (no full screen sheet)
+  modalView: {
+    width: width * 0.9,
+    height: height * 0.8,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 10,
+  },
 
-  inputRow: { flexDirection: 'row', gap: 10, paddingTop: 15, borderTopWidth: 1, alignItems: 'center' },
-  input: { flex: 1, borderRadius: 25, paddingHorizontal: 20, height: 50, fontSize: 16 },
-  sendBtn: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', elevation: 2 },
-  micBtn: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', elevation: 4 }
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderBottomWidth: 1 },
+  title: { fontSize: 18, fontWeight: 'bold' },
+  
+  // Chat
+  bubbleWrap: { flexDirection: 'row', marginBottom: 12, alignItems: 'flex-end' },
+  userWrap: { justifyContent: 'flex-end' },
+  aiWrap: { justifyContent: 'flex-start' },
+  avatar: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 8 },
+  bubble: { padding: 12, borderRadius: 18, maxWidth: '80%' },
+  
+  // Opciones (Duplicados)
+  optionsContainer: { marginLeft: 36, marginBottom: 15 },
+  optionsTitle: { marginBottom: 8, fontSize: 14, fontStyle:'italic' },
+  optionBtn: { padding: 10, borderRadius: 10, borderWidth: 1, marginBottom: 6 },
+  optionLabel: { fontWeight: 'bold', fontSize: 14 },
+  optionSub: { fontSize: 12 },
+
+  // Card Confirmación
+  card: { marginTop: 10, padding: 15, borderRadius: 12, borderWidth: 1, marginBottom: 20 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  cardTitle: { fontWeight: 'bold', fontSize: 16 },
+  btn: { flex: 1, padding: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+
+  // Input
+  inputContainer: { flexDirection: 'row', padding: 10, borderTopWidth: 1, alignItems: 'center', gap: 10 },
+  input: { flex: 1, height: 45, borderRadius: 25, paddingHorizontal: 15 },
+  circleBtn: { width: 45, height: 45, borderRadius: 25, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }
 });

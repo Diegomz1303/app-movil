@@ -13,7 +13,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../context/ThemeContext'; 
-import LottieView from 'lottie-react-native'; // <--- Importante
+import LottieView from 'lottie-react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -90,7 +90,8 @@ export default function PerfilTab() {
            <MaterialCommunityIcons name="account" size={60} color={theme.primary} />
         </View>
         <Text style={[styles.userName, { color: theme.text }]}>Administrador</Text>
-        <Text style={[styles.userRole, { color: theme.textSecondary }]}>Veterinaria Pet</Text>
+        {/* CORRECCIÓN AQUÍ: */}
+        <Text style={[styles.userRole, { color: theme.textSecondary }]}>OhMyPet</Text>
       </View>
 
       {/* Sección de Ajustes */}

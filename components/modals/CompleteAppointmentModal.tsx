@@ -9,7 +9,6 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { supabase } from '../../lib/supabase';
 import { COLORES } from '../../constants/colors';
-// 1. Importamos el hook del tema
 import { useTheme } from '../../context/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
@@ -27,10 +26,12 @@ interface CompleteModalProps {
 }
 
 export default function CompleteAppointmentModal({ visible, onClose, citaId, mascotaNombre, onSuccess }: CompleteModalProps) {
+  // Animación Entrada Modal Principal
   const scaleValue = useRef(new Animated.Value(0)).current;
-  const [loading, setLoading] = useState(false);
 
-  // 2. Usamos el tema
+  const [loading, setLoading] = useState(false);
+  const [showSuccessView, setShowSuccessView] = useState(false); // Estado para cambiar la vista a éxito
+
   const { theme, isDark } = useTheme();
 
   // Estados del Formulario
@@ -49,10 +50,10 @@ export default function CompleteAppointmentModal({ visible, onClose, citaId, mas
   const [fotoSalida, setFotoSalida] = useState<string | null>(null);
   const [fotoBoleta, setFotoBoleta] = useState<string | null>(null);
 
-  // Animación de entrada
+  // Animación de entrada principal
   useEffect(() => {
     if (visible) {
-      limpiar();
+      limpiar(); // Reseteamos todo al abrir
       scaleValue.setValue(0);
       Animated.spring(scaleValue, {
         toValue: 1, friction: 6, tension: 50, useNativeDriver: true
@@ -65,6 +66,7 @@ export default function CompleteAppointmentModal({ visible, onClose, citaId, mas
     setMetodoPago(''); setShampoo('');
     setFotoLlegada(null); setFotoSalida(null); setFotoBoleta(null);
     setShowPagoDrop(false); setShowShampooDrop(false);
+    setShowSuccessView(false);
   };
 
   // --- Lógica de Imágenes ---
@@ -127,11 +129,17 @@ export default function CompleteAppointmentModal({ visible, onClose, citaId, mas
 
     setLoading(false);
 
-    if (error) Alert.alert("Error", error.message);
-    else {
-      Alert.alert("¡Excelente!", "Cita completada con éxito.");
-      onSuccess();
-      onClose();
+    if (error) {
+        Alert.alert("Error", error.message);
+    } else {
+        // MOSTRAR VISTA DE ÉXITO
+        setShowSuccessView(true);
+        
+        // CERRAR AUTOMÁTICAMENTE DESPUÉS DE 2 SEGUNDOS
+        setTimeout(() => {
+            onSuccess(); // Refrescar lista en dashboard
+            onClose();   // Cerrar modal
+        }, 2000);
     }
   };
 
@@ -141,7 +149,7 @@ export default function CompleteAppointmentModal({ visible, onClose, citaId, mas
   const inputBg = { backgroundColor: theme.inputBackground, borderColor: theme.border };
   const placeholderColor = theme.textSecondary;
 
-  // Helper para el placeholder de imagen (adaptado al tema)
+  // Helper para el placeholder de imagen
   const ImageBox = ({ uri, label, onPress }: { uri: string | null, label: string, onPress: () => void }) => (
     <TouchableOpacity style={[styles.imageBox, inputBg]} onPress={onPress} activeOpacity={0.7}>
       {uri ? (
@@ -155,163 +163,187 @@ export default function CompleteAppointmentModal({ visible, onClose, citaId, mas
     </TouchableOpacity>
   );
 
+  // --- VISTA DE FORMULARIO ---
+  const renderForm = () => (
+    <>
+      {/* Header */}
+      <View style={[styles.header, { borderBottomColor: theme.border }]}>
+        <View>
+          <Text style={[styles.modalTitle, textColor]}>Completar Cita</Text>
+          <Text style={[styles.modalSubtitle, textSecondary]}>Mascota: {mascotaNombre}</Text>
+        </View>
+        <TouchableOpacity onPress={onClose}>
+          <MaterialCommunityIcons name="close" size={24} color={theme.textSecondary} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        
+        {/* Fila 1: Fotos Llegada y Salida */}
+        <View style={styles.row}>
+            <View style={styles.halfInput}>
+                <Text style={[styles.label, textSecondary]}>1. Foto Llegada (Opc.)</Text>
+                <ImageBox uri={fotoLlegada} label="Subir foto" onPress={() => pickImage('llegada')} />
+            </View>
+            <View style={styles.halfInput}>
+                <Text style={[styles.label, textSecondary]}>2. Foto Salida (Opc.)</Text>
+                <ImageBox uri={fotoSalida} label="Subir foto" onPress={() => pickImage('salida')} />
+            </View>
+        </View>
+
+        {/* Fila 2: Precio y Peso */}
+        <View style={styles.row}>
+            <View style={styles.halfInput}>
+                <Text style={[styles.label, textSecondary]}>3. Precio (S/.) *</Text>
+                <TextInput 
+                    style={[styles.input, inputBg, textColor]} 
+                    placeholder="Ej: 50.00" 
+                    placeholderTextColor={placeholderColor}
+                    keyboardType="numeric"
+                    value={precio}
+                    onChangeText={setPrecio}
+                />
+            </View>
+            <View style={styles.halfInput}>
+                <Text style={[styles.label, textSecondary]}>4. Peso (kg) (Opc.)</Text>
+                <TextInput 
+                    style={[styles.input, inputBg, textColor]} 
+                    placeholder="Ej: 5.5" 
+                    placeholderTextColor={placeholderColor}
+                    keyboardType="numeric"
+                    value={peso}
+                    onChangeText={setPeso}
+                />
+            </View>
+        </View>
+
+        {/* Fila 3: Método de Pago y Shampoo */}
+        <View style={styles.row}>
+            <View style={[styles.halfInput, { zIndex: 20 }]}>
+                <Text style={[styles.label, textSecondary]}>5. Método de Pago *</Text>
+                <TouchableOpacity 
+                    style={[styles.dropdown, inputBg]} 
+                    onPress={() => { setShowPagoDrop(!showPagoDrop); setShowShampooDrop(false); }}
+                >
+                    <Text style={{ color: metodoPago ? theme.text : placeholderColor }}>
+                        {metodoPago || 'Seleccionar...'}
+                    </Text>
+                    <MaterialCommunityIcons name="chevron-down" size={20} color={theme.textSecondary} />
+                </TouchableOpacity>
+                {showPagoDrop && (
+                    <View style={[styles.dropList, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                        {METODOS_PAGO.map(m => (
+                            <TouchableOpacity key={m} style={[styles.dropItem, { borderBottomColor: theme.border }]} onPress={() => { setMetodoPago(m); setShowPagoDrop(false); }}>
+                                <Text style={{ color: theme.text }}>{m}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                )}
+            </View>
+
+            <View style={[styles.halfInput, { zIndex: 10 }]}>
+                <Text style={[styles.label, textSecondary]}>6. Shampoo (Opc.)</Text>
+                <TouchableOpacity 
+                    style={[styles.dropdown, inputBg]} 
+                    onPress={() => { setShowShampooDrop(!showShampooDrop); setShowPagoDrop(false); }}
+                >
+                    <Text style={{ color: shampoo ? theme.text : placeholderColor }}>
+                        {shampoo || 'Seleccionar...'}
+                    </Text>
+                    <MaterialCommunityIcons name="chevron-down" size={20} color={theme.textSecondary} />
+                </TouchableOpacity>
+                {showShampooDrop && (
+                    <View style={[styles.dropList, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                        {SHAMPOOS.map(s => (
+                            <TouchableOpacity key={s} style={[styles.dropItem, { borderBottomColor: theme.border }]} onPress={() => { setShampoo(s); setShowShampooDrop(false); }}>
+                                <Text style={{ color: theme.text }}>{s}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                )}
+            </View>
+        </View>
+
+        {/* Boleta */}
+        <View style={styles.inputGroup}>
+            <Text style={[styles.label, textSecondary]}>7. Boleta / Comprobante (Opcional)</Text>
+            <TouchableOpacity 
+                style={[styles.imageBox, inputBg, { height: 60, flexDirection: 'row', gap: 10 }]} 
+                onPress={() => pickImage('boleta')}
+            >
+                 {fotoBoleta ? (
+                     <Image source={{ uri: fotoBoleta }} style={{ width: '100%', height: '100%', borderRadius: 10 }} resizeMode='cover' />
+                 ) : (
+                     <>
+                        <MaterialCommunityIcons name="file-document-outline" size={24} color={theme.textSecondary} />
+                        <Text style={[textSecondary, { fontSize: 13 }]}>Clic para subir boleta (opcional)</Text>
+                     </>
+                 )}
+            </TouchableOpacity>
+        </View>
+
+        {/* Observaciones */}
+        <View style={styles.inputGroup}>
+            <Text style={[styles.label, textSecondary]}>8. Observaciones Finales (Opcional)</Text>
+            <TextInput 
+                style={[styles.input, inputBg, textColor, { height: 80, textAlignVertical: 'top' }]} 
+                multiline 
+                placeholder="Comportamiento, notas del servicio..."
+                placeholderTextColor={placeholderColor}
+                value={observaciones}
+                onChangeText={setObservaciones}
+            />
+        </View>
+
+        {/* Botones */}
+        <View style={styles.footer}>
+            <TouchableOpacity 
+                style={[styles.btnCancel, { backgroundColor: theme.inputBackground }]} 
+                onPress={onClose}
+            >
+                <Text style={[styles.textCancel, textSecondary]}>Cancelar</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.btnConfirm} onPress={handleComplete} disabled={loading}>
+                {loading ? <ActivityIndicator color="white" /> : (
+                     <>
+                        <MaterialCommunityIcons name="check" size={18} color="white" style={{ marginRight: 5 }} />
+                        <Text style={styles.textConfirm}>Confirmar y Completar</Text>
+                     </>
+                )}
+            </TouchableOpacity>
+        </View>
+        <View style={{height: 20}} />
+
+      </ScrollView>
+    </>
+  );
+
+  // --- VISTA DE ÉXITO (IGUAL QUE AGREGAR CLIENTE) ---
+  const renderSuccessView = () => (
+    <View style={styles.successContainer}>
+      <MaterialCommunityIcons 
+        name="check-circle" 
+        size={100} 
+        color={theme.primary} 
+        style={{ marginBottom: 20 }}
+      />
+      <Text style={[styles.successTitle, { color: theme.text }]}>¡Excelente!</Text>
+      <Text style={[styles.successMessage, { color: theme.textSecondary }]}>
+        Cita completada con éxito.
+      </Text>
+    </View>
+  );
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.centeredView}>
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose} />
         
         <Animated.View style={[styles.modalView, { transform: [{ scale: scaleValue }], backgroundColor: theme.card }]}>
-          
-          {/* Header */}
-          <View style={[styles.header, { borderBottomColor: theme.border }]}>
-            <View>
-              <Text style={[styles.modalTitle, textColor]}>Completar Cita</Text>
-              <Text style={[styles.modalSubtitle, textSecondary]}>Mascota: {mascotaNombre}</Text>
-            </View>
-            <TouchableOpacity onPress={onClose}>
-              <MaterialCommunityIcons name="close" size={24} color={theme.textSecondary} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
             
-            {/* Fila 1: Fotos Llegada y Salida */}
-            <View style={styles.row}>
-                <View style={styles.halfInput}>
-                    <Text style={[styles.label, textSecondary]}>1. Foto Llegada (Opc.)</Text>
-                    <ImageBox uri={fotoLlegada} label="Subir foto" onPress={() => pickImage('llegada')} />
-                </View>
-                <View style={styles.halfInput}>
-                    <Text style={[styles.label, textSecondary]}>2. Foto Salida (Opc.)</Text>
-                    <ImageBox uri={fotoSalida} label="Subir foto" onPress={() => pickImage('salida')} />
-                </View>
-            </View>
+            {showSuccessView ? renderSuccessView() : renderForm()}
 
-            {/* Fila 2: Precio y Peso */}
-            <View style={styles.row}>
-                <View style={styles.halfInput}>
-                    <Text style={[styles.label, textSecondary]}>3. Precio (S/.) *</Text>
-                    <TextInput 
-                        style={[styles.input, inputBg, textColor]} 
-                        placeholder="Ej: 50.00" 
-                        placeholderTextColor={placeholderColor}
-                        keyboardType="numeric"
-                        value={precio}
-                        onChangeText={setPrecio}
-                    />
-                </View>
-                <View style={styles.halfInput}>
-                    <Text style={[styles.label, textSecondary]}>4. Peso (kg) (Opc.)</Text>
-                    <TextInput 
-                        style={[styles.input, inputBg, textColor]} 
-                        placeholder="Ej: 5.5" 
-                        placeholderTextColor={placeholderColor}
-                        keyboardType="numeric"
-                        value={peso}
-                        onChangeText={setPeso}
-                    />
-                </View>
-            </View>
-
-            {/* Fila 3: Método de Pago y Shampoo */}
-            <View style={styles.row}>
-                <View style={[styles.halfInput, { zIndex: 20 }]}>
-                    <Text style={[styles.label, textSecondary]}>5. Método de Pago *</Text>
-                    <TouchableOpacity 
-                        style={[styles.dropdown, inputBg]} 
-                        onPress={() => { setShowPagoDrop(!showPagoDrop); setShowShampooDrop(false); }}
-                    >
-                        <Text style={{ color: metodoPago ? theme.text : placeholderColor }}>
-                            {metodoPago || 'Seleccionar...'}
-                        </Text>
-                        <MaterialCommunityIcons name="chevron-down" size={20} color={theme.textSecondary} />
-                    </TouchableOpacity>
-                    {showPagoDrop && (
-                        <View style={[styles.dropList, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                            {METODOS_PAGO.map(m => (
-                                <TouchableOpacity key={m} style={[styles.dropItem, { borderBottomColor: theme.border }]} onPress={() => { setMetodoPago(m); setShowPagoDrop(false); }}>
-                                    <Text style={{ color: theme.text }}>{m}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    )}
-                </View>
-
-                <View style={[styles.halfInput, { zIndex: 10 }]}>
-                    <Text style={[styles.label, textSecondary]}>6. Shampoo (Opc.)</Text>
-                    <TouchableOpacity 
-                        style={[styles.dropdown, inputBg]} 
-                        onPress={() => { setShowShampooDrop(!showShampooDrop); setShowPagoDrop(false); }}
-                    >
-                        <Text style={{ color: shampoo ? theme.text : placeholderColor }}>
-                            {shampoo || 'Seleccionar...'}
-                        </Text>
-                        <MaterialCommunityIcons name="chevron-down" size={20} color={theme.textSecondary} />
-                    </TouchableOpacity>
-                    {showShampooDrop && (
-                        <View style={[styles.dropList, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                            {SHAMPOOS.map(s => (
-                                <TouchableOpacity key={s} style={[styles.dropItem, { borderBottomColor: theme.border }]} onPress={() => { setShampoo(s); setShowShampooDrop(false); }}>
-                                    <Text style={{ color: theme.text }}>{s}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    )}
-                </View>
-            </View>
-
-            {/* Boleta */}
-            <View style={styles.inputGroup}>
-                <Text style={[styles.label, textSecondary]}>7. Boleta / Comprobante (Opcional)</Text>
-                <TouchableOpacity 
-                    style={[styles.imageBox, inputBg, { height: 60, flexDirection: 'row', gap: 10 }]} 
-                    onPress={() => pickImage('boleta')}
-                >
-                     {fotoBoleta ? (
-                         <Image source={{ uri: fotoBoleta }} style={{ width: '100%', height: '100%', borderRadius: 10 }} resizeMode='cover' />
-                     ) : (
-                         <>
-                            <MaterialCommunityIcons name="file-document-outline" size={24} color={theme.textSecondary} />
-                            <Text style={[textSecondary, { fontSize: 13 }]}>Clic para subir boleta (opcional)</Text>
-                         </>
-                     )}
-                </TouchableOpacity>
-            </View>
-
-            {/* Observaciones */}
-            <View style={styles.inputGroup}>
-                <Text style={[styles.label, textSecondary]}>8. Observaciones Finales (Opcional)</Text>
-                <TextInput 
-                    style={[styles.input, inputBg, textColor, { height: 80, textAlignVertical: 'top' }]} 
-                    multiline 
-                    placeholder="Comportamiento, notas del servicio..."
-                    placeholderTextColor={placeholderColor}
-                    value={observaciones}
-                    onChangeText={setObservaciones}
-                />
-            </View>
-
-            {/* Botones */}
-            <View style={styles.footer}>
-                <TouchableOpacity 
-                    style={[styles.btnCancel, { backgroundColor: theme.inputBackground }]} 
-                    onPress={onClose}
-                >
-                    <Text style={[styles.textCancel, textSecondary]}>Cancelar</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity style={styles.btnConfirm} onPress={handleComplete} disabled={loading}>
-                    {loading ? <ActivityIndicator color="white" /> : (
-                         <>
-                            <MaterialCommunityIcons name="check" size={18} color="white" style={{ marginRight: 5 }} />
-                            <Text style={styles.textConfirm}>Confirmar y Completar</Text>
-                         </>
-                    )}
-                </TouchableOpacity>
-            </View>
-            <View style={{height: 20}} />
-
-          </ScrollView>
         </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
@@ -329,12 +361,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden'
   },
 
+  // Estilos Header
   header: { 
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', 
     marginBottom: 15, borderBottomWidth: 1, paddingBottom: 10 
   },
   modalTitle: { fontSize: 20, fontWeight: 'bold' },
   modalSubtitle: { fontSize: 13, marginTop: 2 },
+  
   scrollContent: { paddingBottom: 10 },
   
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
@@ -355,7 +389,6 @@ const styles = StyleSheet.create({
   },
   dropItem: { padding: 10, borderBottomWidth: 1 },
   
-  // Estilos de Caja de Imagen
   imageBox: {
     height: 100, borderWidth: 1, borderStyle: 'dashed', borderRadius: 10,
     justifyContent: 'center', alignItems: 'center'
@@ -371,5 +404,19 @@ const styles = StyleSheet.create({
     flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: COLORES.principal, 
     flexDirection: 'row', justifyContent: 'center', alignItems: 'center' 
   },
-  textConfirm: { color: 'white', fontWeight: 'bold' }
+  textConfirm: { color: 'white', fontWeight: 'bold' },
+
+  // --- ESTILOS DE VISTA ÉXITO (SIMPLE) ---
+  successContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  successTitle: { 
+    fontSize: 24, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' 
+  },
+  successMessage: { 
+    fontSize: 16, textAlign: 'center', color: '#666' 
+  }
 });

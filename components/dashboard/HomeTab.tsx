@@ -4,119 +4,48 @@ import {
   Text, 
   StyleSheet, 
   ScrollView, 
-  Dimensions, 
   ActivityIndicator, 
-  RefreshControl 
+  RefreshControl
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { BarChart } from 'react-native-chart-kit';
 import { supabase } from '../../lib/supabase';
-import { COLORES } from '../../constants/colors';
 import { useData } from '../../context/DataContext';
 import { useTheme } from '../../context/ThemeContext';
-
-const screenWidth = Dimensions.get("window").width;
 
 export default function HomeTab() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   
-  // Estados Servicios (Citas)
-  const [ingresosServicios, setIngresosServicios] = useState(0);
+  // Solo contadores operativos (Sin dinero)
   const [totalCitas, setTotalCitas] = useState(0);
   const [totalClientes, setTotalClientes] = useState(0);
-  const [chartLabels, setChartLabels] = useState<string[]>([]);
-  const [citasChartValues, setCitasChartValues] = useState<number[]>([]);
-
-  // Estados Ventas (Productos)
-  const [ingresosVentas, setIngresosVentas] = useState(0);
-  const [totalVentas, setTotalVentas] = useState(0);
-  const [ventasChartValues, setVentasChartValues] = useState<number[]>([]);
-
-  const [chartReady, setChartReady] = useState(false);
+  const [totalProductos, setTotalProductos] = useState(0);
 
   const { appointmentsTrigger, clientsTrigger } = useData();
   const { theme, isDark } = useTheme();
 
-  const procesarDatos = useCallback((citas: any[], ventas: any[], numClientes: number) => {
-    const hoy = new Date();
-    
-    // --- 1. Procesar Totales Generales ---
-    setTotalClientes(numClientes);
-    setTotalCitas(citas.length);
-    setTotalVentas(ventas.length);
-
-    // Sumar Ingresos Servicios
-    const totalServ = citas
-      .filter(c => c.estado === 'completada')
-      .reduce((acc, curr) => acc + (Number(curr.precio) || 0), 0);
-    setIngresosServicios(totalServ);
-
-    // Sumar Ingresos Ventas
-    const totalProd = ventas
-      .reduce((acc, curr) => acc + (Number(curr.total) || 0), 0);
-    setIngresosVentas(totalProd);
-
-    // --- 2. Procesar Gráficos (Últimos 6 meses) ---
-    const meses: { [key: string]: { citas: number, ventas: number } } = {};
-    const etiquetas: string[] = [];
-    const valoresCitas: number[] = [];
-    const valoresVentas: number[] = [];
-
-    // Inicializar últimos 6 meses
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
-      const nombreMes = d.toLocaleString('es-ES', { month: 'short' }); 
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      
-      meses[key] = { citas: 0, ventas: 0 };
-      etiquetas.push(nombreMes); 
-    }
-
-    // Contar Citas por mes
-    citas.forEach(cita => {
-      if (cita.fecha) {
-        const key = cita.fecha.substring(0, 7); 
-        if (meses[key]) meses[key].citas += 1;
-      }
-    });
-
-    // Contar Ventas por mes
-    ventas.forEach(venta => {
-      if (venta.fecha) {
-        const key = venta.fecha.substring(0, 7); 
-        if (meses[key]) meses[key].ventas += 1;
-      }
-    });
-
-    const keysOrdenadas = Object.keys(meses).sort();
-    keysOrdenadas.forEach(k => {
-        valoresCitas.push(meses[k].citas);
-        valoresVentas.push(meses[k].ventas);
-    });
-
-    setChartLabels(etiquetas);
-    setCitasChartValues(valoresCitas);
-    setVentasChartValues(valoresVentas);
-    setChartReady(true);
-  }, []);
-
   const fetchData = async () => {
     setLoading(true);
-    setChartReady(false); 
     
     try {
-      const [resCitas, resClientes, resVentas] = await Promise.all([
-        supabase.from('citas').select('fecha, precio, estado'),
-        supabase.from('clientes').select('*', { count: 'exact', head: true }),
-        supabase.from('ventas').select('fecha, total')
-      ]);
+      // 1. Contar Citas (Solo cantidad, sin traer datos pesados)
+      const resCitas = await supabase
+        .from('citas')
+        .select('*', { count: 'exact', head: true });
 
-      const citasData = resCitas.data || [];
-      const ventasData = resVentas.data || [];
-      const clientesCount = resClientes.count || 0;
+      // 2. Contar Clientes
+      const resClientes = await supabase
+        .from('clientes')
+        .select('*', { count: 'exact', head: true });
 
-      procesarDatos(citasData, ventasData, clientesCount);
+      // 3. Contar Productos (Inventario)
+      const resProductos = await supabase
+        .from('productos')
+        .select('*', { count: 'exact', head: true });
+
+      setTotalCitas(resCitas.count || 0);
+      setTotalClientes(resClientes.count || 0);
+      setTotalProductos(resProductos.count || 0);
 
     } catch (e) {
       console.error("Error cargando datos:", e);
@@ -135,10 +64,11 @@ export default function HomeTab() {
     fetchData();
   }, []);
 
-  const StatCard = React.memo(({ icon, title, value, color, fullWidth }: any) => (
-    <View style={[styles.statCard, { backgroundColor: theme.card, width: fullWidth ? '100%' : '48%' }]}>
+  // Componente interno para las tarjetas
+  const StatCard = React.memo(({ icon, title, value, color }: any) => (
+    <View style={[styles.statCard, { backgroundColor: theme.card }]}>
       <View style={[styles.iconBox, { backgroundColor: color }]}>
-        <MaterialCommunityIcons name={icon} size={24} color="white" />
+        <MaterialCommunityIcons name={icon} size={28} color="white" />
       </View>
       <View>
         <Text style={[styles.statValue, { color: theme.text }]}>{value}</Text>
@@ -147,53 +77,6 @@ export default function HomeTab() {
     </View>
   ));
 
-  // --- FUNCIÓN DE RENDERIZADO DE GRÁFICO MEJORADA ---
-  const renderBarChart = (dataValues: number[], barColor: string) => (
-    <BarChart
-        data={{
-            labels: chartLabels,
-            datasets: [{ data: dataValues }]
-        }}
-        width={screenWidth - 40} // Ancho completo menos márgenes
-        height={240}
-        yAxisLabel=""
-        yAxisSuffix=""
-        fromZero
-        chartConfig={{
-            backgroundColor: theme.card,
-            backgroundGradientFrom: theme.card,
-            backgroundGradientTo: theme.card,
-            // ESTO HACE QUE LAS BARRAS SEAN SÓLIDAS Y VISIBLES
-            fillShadowGradientFrom: barColor,
-            fillShadowGradientTo: barColor,
-            fillShadowGradientOpacity: 1, 
-            
-            decimalPlaces: 0,
-            color: (opacity = 1) => barColor, // Color base
-            labelColor: (opacity = 1) => theme.textSecondary, // Color de textos (meses)
-            
-            barPercentage: 0.6, // Barras más anchas (0.1 a 1)
-            
-            propsForBackgroundLines: {
-                strokeWidth: 0.5,
-                stroke: theme.border,
-                strokeDasharray: "4", // Líneas punteadas sutiles
-            },
-            propsForLabels: {
-                fontSize: 11,
-                fontWeight: '600'
-            }
-        }}
-        style={{ 
-            marginVertical: 8, 
-            borderRadius: 16,
-            paddingRight: 0 
-        }}
-        showValuesOnTopOfBars={true} // Muestra el número exacto arriba
-        withInnerLines={true}
-    />
-  );
-
   return (
     <ScrollView 
       style={[styles.container, { backgroundColor: 'transparent' }]} 
@@ -201,88 +84,67 @@ export default function HomeTab() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.primary]} tintColor={theme.primary} />}
     >
       <View style={styles.header}>
-        <Text style={[styles.welcomeText, { color: theme.text }]}>Resumen General</Text>
-        <Text style={[styles.dateText, { color: theme.textSecondary }]}>Bienvenido de nuevo</Text>
+        <Text style={[styles.welcomeText, { color: theme.text }]}>Hola, Equipo 👋</Text>
+        <Text style={[styles.dateText, { color: theme.textSecondary }]}>Panel Operativo</Text>
       </View>
 
       {loading ? (
         <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 50 }} />
       ) : (
         <>
-          {/* ================= SECCIÓN SERVICIOS ================= */}
+          {/* Banner de Bienvenida */}
+          <View style={[styles.banner, { backgroundColor: theme.card }]}>
+             <MaterialCommunityIcons name="paw" size={40} color={theme.primary} />
+             <View style={{marginLeft: 15, flex: 1}}>
+                <Text style={[styles.bannerTitle, {color: theme.text}]}>¡Buen turno!</Text>
+                <Text style={{color: theme.textSecondary, fontSize: 13}}>Recuerda registrar cada cita y mantener actualizado el inventario.</Text>
+             </View>
+          </View>
+
+          {/* ================= SECCIÓN RESUMEN OPERATIVO ================= */}
           <View style={styles.sectionContainer}>
-            <Text style={[styles.sectionHeader, { color: theme.text }]}>Servicios & Citas</Text>
+            <Text style={[styles.sectionHeader, { color: theme.text }]}>Resumen Global</Text>
             
-            <View style={styles.statsContainer}>
+            <View style={styles.statsGrid}>
+                {/* Card de Citas Totales */}
                 <StatCard 
-                    icon="cash-multiple" 
-                    title="Ingresos Servicios" 
-                    value={`S/. ${ingresosServicios.toFixed(2)}`} 
-                    color={theme.primary} 
-                    fullWidth
+                    icon="calendar-check" 
+                    title="Citas Registradas" 
+                    value={totalCitas} 
+                    color="#FFB74D" 
                 />
-                <View style={{ height: 10 }} />
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <StatCard icon="calendar-check" title="Citas Realizadas" value={totalCitas} color="#FFB74D" />
-                    <StatCard icon="account-group" title="Clientes Totales" value={totalClientes} color="#4FC3F7" />
-                </View>
-            </View>
-
-            {/* Gráfico de Barras SERVICIOS */}
-            <View style={[styles.chartContainer, { backgroundColor: theme.card }]}>
-                <View style={styles.chartHeader}>
-                    <MaterialCommunityIcons name="chart-bar" size={20} color={theme.text} />
-                    <Text style={[styles.chartTitle, { color: theme.text }]}>Tendencia de Citas</Text>
-                </View>
                 
-                {chartReady ? renderBarChart(citasChartValues, COLORES.principal) : (
-                    <ActivityIndicator color={theme.primary} style={{ height: 220 }} />
-                )}
+                {/* Card de Clientes */}
+                <StatCard 
+                    icon="account-group" 
+                    title="Clientes Totales" 
+                    value={totalClientes} 
+                    color="#4FC3F7" 
+                />
+
+                {/* Card de Productos */}
+                <StatCard 
+                    icon="package-variant-closed" 
+                    title="Prod. en Inventario" 
+                    value={totalProductos} 
+                    color="#81C784" 
+                />
+
+                {/* Card Informativa */}
+                <StatCard 
+                    icon="information-outline" 
+                    title="Estado Sistema" 
+                    value="En Línea" 
+                    color={theme.primary} 
+                />
             </View>
           </View>
 
-          {/* Divisor visual */}
-          <View style={{ height: 1, backgroundColor: theme.border, marginVertical: 15, marginHorizontal: 20 }} />
-
-          {/* ================= SECCIÓN VENTAS (PRODUCTOS) ================= */}
-          <View style={styles.sectionContainer}>
-            <Text style={[styles.sectionHeader, { color: theme.text }]}>Ventas de Tienda</Text>
-            
-            <View style={styles.statsContainer}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <StatCard 
-                        icon="shopping" 
-                        title="Ventas Totales" 
-                        value={`S/. ${ingresosVentas.toFixed(2)}`} 
-                        color="#FF7043" 
-                    />
-                    <StatCard 
-                        icon="receipt" 
-                        title="Transacciones" 
-                        value={totalVentas} 
-                        color="#AB47BC" 
-                    />
-                </View>
-            </View>
-
-            {/* Gráfico de Barras VENTAS */}
-            <View style={[styles.chartContainer, { backgroundColor: theme.card }]}>
-                <View style={styles.chartHeader}>
-                    <MaterialCommunityIcons name="chart-line" size={20} color={theme.text} />
-                    <Text style={[styles.chartTitle, { color: theme.text }]}>Tendencia de Ventas</Text>
-                </View>
-                
-                {chartReady ? renderBarChart(ventasChartValues, '#FF7043') : (
-                    <ActivityIndicator color={theme.primary} style={{ height: 220 }} />
-                )}
-            </View>
-          </View>
-
-          {/* Banner Info */}
-          <View style={[styles.infoBanner, { backgroundColor: isDark ? '#37474F' : '#FFF9C4' }]}>
-             <MaterialCommunityIcons name="lightbulb-on-outline" size={24} color={isDark ? '#FFD54F' : '#FBC02D'} />
-             <Text style={[styles.infoText, { color: isDark ? '#ECEFF1' : '#5D4037' }]}>
-                Recuerda: Los gráficos muestran la cantidad de operaciones realizadas cada mes.
+          {/* Banner Info Empleado */}
+          <View style={[styles.infoBanner, { backgroundColor: isDark ? '#37474F' : '#E3F2FD' }]}>
+             <MaterialCommunityIcons name="shield-check-outline" size={24} color={isDark ? '#90CAF9' : '#1976D2'} />
+             <Text style={[styles.infoText, { color: isDark ? '#E3F2FD' : '#0D47A1' }]}>
+                Modo Empleado: La visualización de reportes financieros e ingresos está deshabilitada.
              </Text>
           </View>
           
@@ -299,28 +161,41 @@ const styles = StyleSheet.create({
   welcomeText: { fontSize: 28, fontWeight: 'bold' },
   dateText: { fontSize: 14, marginTop: 5 },
   
+  banner: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    padding: 20,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+  },
+  bannerTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
+
   sectionContainer: { marginBottom: 20 },
   sectionHeader: { fontSize: 18, fontWeight: 'bold', marginHorizontal: 20, marginBottom: 15, marginTop: 5 },
 
-  statsContainer: { paddingHorizontal: 20, marginBottom: 15 },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    gap: 15
+  },
   statCard: {
-    borderRadius: 16, padding: 15,
-    flexDirection: 'row', alignItems: 'center',
+    borderRadius: 16, 
+    padding: 15,
+    width: '47%', // Para que entren 2 por fila
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10
   },
   iconBox: {
-    width: 45, height: 45, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15
+    width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginBottom: 5
   },
-  statValue: { fontSize: 18, fontWeight: 'bold' },
-  statTitle: { fontSize: 12 },
-
-  chartContainer: {
-    marginHorizontal: 20, borderRadius: 16, padding: 15,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
-    alignItems: 'center'
-  },
-  chartHeader: { flexDirection: 'row', alignSelf: 'flex-start', marginBottom: 10, alignItems: 'center', gap: 8 },
-  chartTitle: { fontSize: 15, fontWeight: '700' },
+  statValue: { fontSize: 22, fontWeight: 'bold', textAlign: 'center' },
+  statTitle: { fontSize: 12, textAlign: 'center' },
 
   infoBanner: {
     margin: 20, padding: 15, borderRadius: 12,

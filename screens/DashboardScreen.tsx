@@ -27,7 +27,7 @@ import BottomNavBar from '../components/ui/BottomNavBar';
 import AddClientModal from '../components/modals/AddClientModal';
 import PetsListModal from '../components/modals/PetsListModal';
 import AddAppointmentModal from '../components/modals/AddAppointmentModal';
-import ReportsModal from '../components/modals/ReportsModal';
+import CalendarModal from '../components/modals/CalendarModal'; 
 import AIChatModal from '../components/modals/AIChatModal';
 
 // Hooks de Contexto
@@ -43,7 +43,7 @@ export default function DashboardScreen() {
   const [clientModalVisible, setClientModalVisible] = useState(false);
   const [appointmentModalVisible, setAppointmentModalVisible] = useState(false);
   const [petsModalVisible, setPetsModalVisible] = useState(false);
-  const [reportsVisible, setReportsVisible] = useState(false);
+  const [calendarVisible, setCalendarVisible] = useState(false);
   
   // Estado IA
   const [aiModalVisible, setAiModalVisible] = useState(false);
@@ -51,12 +51,14 @@ export default function DashboardScreen() {
   const { refreshClients, refreshAppointments } = useData();
   const { theme, isDark } = useTheme(); 
 
+  // Esta función decide qué modal abrir según la pestaña activa
   const handleMainButtonClick = () => {
     if (activeTab === 'Clientes') {
       setClientModalVisible(true);
     } else if (activeTab === 'Citas') {
       setAppointmentModalVisible(true);
     } else {
+      // Por defecto en otras pantallas abre cita (o puedes abrir el menú)
       setAppointmentModalVisible(true);
     }
   };
@@ -104,7 +106,7 @@ export default function DashboardScreen() {
 
   // Estilos dinámicos para el botón de IA
   const aiButtonStyle = {
-    backgroundColor: isDark ? '#7C4DFF' : theme.primary, // Violeta brillante en Dark, Verde Principal en Light
+    backgroundColor: isDark ? '#7C4DFF' : theme.primary,
     shadowColor: isDark ? '#7C4DFF' : theme.primary,
     borderColor: theme.card,
   };
@@ -130,7 +132,7 @@ export default function DashboardScreen() {
         </View>
       </ImageBackground>
 
-      {/* --- BOTÓN FLOTANTE IA MEJORADO --- */}
+      {/* --- BOTÓN FLOTANTE IA --- */}
       <Animatable.View 
         animation="zoomIn" 
         duration={600} 
@@ -146,7 +148,7 @@ export default function DashboardScreen() {
           <View style={styles.aiButtonShine} />
           <MaterialCommunityIcons name="robot-happy-outline" size={32} color="white" />
           
-          {/* Badge opcional "AI" */}
+          {/* Badge opcional "IA" */}
           <View style={[styles.aiBadge, { backgroundColor: theme.card }]}>
             <Animatable.Text 
                 animation="pulse" 
@@ -164,8 +166,10 @@ export default function DashboardScreen() {
         onTabChange={setActiveTab} 
         onAddClick={handleMainButtonClick} 
         onPetsClick={() => setPetsModalVisible(true)}
-        onReportsClick={() => setReportsVisible(true)}
+        onCalendarClick={() => setCalendarVisible(true)}
       />
+
+      {/* --- MODALES --- */}
 
       <AddClientModal 
         visible={clientModalVisible} 
@@ -184,9 +188,9 @@ export default function DashboardScreen() {
         onClose={() => setPetsModalVisible(false)}
       />
 
-      <ReportsModal 
-        visible={reportsVisible} 
-        onClose={() => setReportsVisible(false)} 
+      <CalendarModal 
+        visible={calendarVisible} 
+        onClose={() => setCalendarVisible(false)} 
       />
 
       <AIChatModal 
@@ -213,7 +217,7 @@ const styles = StyleSheet.create({
     marginBottom: 70, 
   },
   
-  // --- ESTILOS NUEVOS DEL BOTÓN IA ---
+  // --- ESTILOS DEL BOTÓN IA ---
   aiButtonContainer: {
     position: 'absolute',
     bottom: 115, // Justo encima del NavBar
@@ -231,7 +235,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 10,
     elevation: 10,
-    borderWidth: 3, // Borde fino para separar del fondo
+    borderWidth: 3, 
   },
   aiButtonShine: {
     position: 'absolute',
@@ -240,7 +244,7 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: 'rgba(255,255,255,0.3)', // Reflejo de luz
+    backgroundColor: 'rgba(255,255,255,0.3)',
   },
   aiBadge: {
     position: 'absolute',

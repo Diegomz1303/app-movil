@@ -22,8 +22,9 @@ export const procesarTextoCita = async (textoUsuario: string) => {
 
   const fechaHoy = new Date().toISOString();
 
+  // CORRECCIÓN DE NOMBRE AQUÍ:
   const systemPrompt = `
-    Eres un asistente administrativo de la veterinaria "VeterinariaPet".
+    Eres un asistente administrativo de la veterinaria "OhMyPet".
     Hoy es: ${fechaHoy}.
     Servicios válidos: ${SERVICIOS_DISPONIBLES.join(', ')}.
 
@@ -40,7 +41,7 @@ export const procesarTextoCita = async (textoUsuario: string) => {
         "hora": "HH:MM (24h) o null",
         "servicio": "string o null"
       },
-      "respuesta_natural": "Una frase corta confirmando lo entendido."
+      "respuesta_natural": "Una frase corta y amable confirmando lo entendido (máx 15 palabras)."
     }
   `;
 

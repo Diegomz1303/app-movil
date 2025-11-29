@@ -16,7 +16,6 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import LottieView from 'lottie-react-native'; 
 import { supabase } from '../../lib/supabase';
 import { COLORES } from '../../constants/colors';
 import { useTheme } from '../../context/ThemeContext';
@@ -50,13 +49,10 @@ const HORARIOS = [
 
 export default function AddAppointmentModal({ visible, onClose, onAppointmentAdded, appointmentToEdit }: AddAppointmentModalProps) {
   const scaleValue = useRef(new Animated.Value(0)).current;
-  const successScale = useRef(new Animated.Value(0)).current; 
   
   const [loading, setLoading] = useState(false);
+  const [showSuccessView, setShowSuccessView] = useState(false); // Estado para la vista de éxito
   const { theme, isDark } = useTheme();
-
-  // Estado para mostrar el éxito (Overlay)
-  const [showSuccessOverlay, setShowSuccessOverlay] = useState(false);
 
   // Datos
   const [clientsList, setClientsList] = useState<SimpleClient[]>([]);
@@ -98,14 +94,6 @@ export default function AddAppointmentModal({ visible, onClose, onAppointmentAdd
       Animated.spring(scaleValue, { toValue: 1, friction: 6, tension: 50, useNativeDriver: true }).start();
     }
   }, [visible, appointmentToEdit]);
-
-  // Efecto Entrada Éxito
-  useEffect(() => {
-    if (showSuccessOverlay) {
-        successScale.setValue(0);
-        Animated.spring(successScale, { toValue: 1, friction: 5, tension: 60, useNativeDriver: true }).start();
-    }
-  }, [showSuccessOverlay]);
 
   const loadAppointmentData = async (cita: any) => {
     if (cita.clientes) setClientSearch(`${cita.clientes.nombres} ${cita.clientes.apellidos}`);
@@ -218,15 +206,14 @@ export default function AddAppointmentModal({ visible, onClose, onAppointmentAdd
     if (error) {
       Alert.alert("Error", error.message);
     } else {
-      // --- ÉXITO: Mostrar Overlay ---
-      setShowSuccessOverlay(true);
+      // --- ÉXITO: Mostrar Vista Limpia y Cerrar ---
+      setShowSuccessView(true);
+      
+      setTimeout(() => {
+          if (onAppointmentAdded) onAppointmentAdded();
+          onClose();
+      }, 2000); // Cierre automático en 2s
     }
-  };
-
-  const handleFinish = () => {
-      setShowSuccessOverlay(false);
-      if (onAppointmentAdded) onAppointmentAdded();
-      onClose();
   };
 
   const limpiarFormulario = () => {
@@ -245,7 +232,7 @@ export default function AddAppointmentModal({ visible, onClose, onAppointmentAdd
     setShowPetDrop(false);
     setShowTimeDrop(false);
     setShowServiceDrop(false);
-    setShowSuccessOverlay(false);
+    setShowSuccessView(false);
   };
 
   const toggleDropdown = (type: 'pet' | 'time' | 'service') => {
@@ -263,14 +250,26 @@ export default function AddAppointmentModal({ visible, onClose, onAppointmentAdd
   const textColor = { color: theme.text };
   const placeholderColor = theme.textSecondary;
 
-  return (
-    <Modal visible={visible} animationType="fade" transparent={true} onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.centeredView}>
-        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose} />
+  // --- VISTA DE ÉXITO (CHECK LIMPIO) ---
+  const renderSuccessView = () => (
+    <View style={styles.successContainer}>
+      <MaterialCommunityIcons 
+        name="check-circle" 
+        size={100} 
+        color={theme.primary} 
+        style={{ marginBottom: 20 }}
+      />
+      <Text style={[styles.successTitle, { color: theme.text }]}>¡Excelente!</Text>
+      <Text style={[styles.successMessage, { color: theme.textSecondary }]}>
+        {appointmentToEdit ? "Cita actualizada con éxito." : "Cita agendada con éxito."}
+      </Text>
+    </View>
+  );
 
-        <Animated.View style={[styles.modalView, { transform: [{ scale: scaleValue }], backgroundColor: theme.card }]}>
-          
-          <View style={styles.header}>
+  // --- VISTA DEL FORMULARIO ---
+  const renderForm = () => (
+    <>
+        <View style={styles.header}>
             <Text style={[styles.modalTitle, textColor]}>
                 {appointmentToEdit ? "Editar Cita" : "Agendar Nueva Cita"}
             </Text>
@@ -391,38 +390,19 @@ export default function AddAppointmentModal({ visible, onClose, onAppointmentAdd
             </View>
             <View style={{ height: 30 }} />
           </ScrollView>
+    </>
+  );
+
+  return (
+    <Modal visible={visible} animationType="fade" transparent={true} onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.centeredView}>
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose} />
+
+        <Animated.View style={[styles.modalView, { transform: [{ scale: scaleValue }], backgroundColor: theme.card }]}>
+          
+            {showSuccessView ? renderSuccessView() : renderForm()}
+
         </Animated.View>
-
-        {/* --- OVERLAY DE ÉXITO (Nuevo Diseño) --- */}
-        {showSuccessOverlay && (
-            <View style={styles.absoluteOverlay}>
-                <Animated.View style={[styles.successBox, { transform: [{ scale: successScale }], backgroundColor: theme.card }]}>
-                    
-                    <View style={styles.lottieContainer}>
-                        <LottieView
-                            source={require('../../assets/success.json')} 
-                            autoPlay
-                            loop={false} 
-                            style={{ width: 120, height: 120 }}
-                            resizeMode="contain"
-                        />
-                    </View>
-
-                    <Text style={[styles.successTitle, { color: theme.text }]}>¡Listo!</Text>
-                    <Text style={[styles.successMessage, { color: theme.textSecondary }]}>
-                        {appointmentToEdit ? "Cita actualizada correctamente." : "Cita agendada correctamente."}
-                    </Text>
-
-                    <TouchableOpacity 
-                        style={styles.btnSuccessConfirm} 
-                        onPress={handleFinish}
-                    >
-                        <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>Aceptar</Text>
-                    </TouchableOpacity>
-                </Animated.View>
-            </View>
-        )}
-
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -432,37 +412,49 @@ const styles = StyleSheet.create({
   centeredView: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   overlay: { position: 'absolute', width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.6)' },
   modalView: { width: width * 0.9, maxHeight: height * 0.9, borderRadius: 20, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 10, overflow: 'hidden' },
+  
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 },
   modalTitle: { fontSize: 22, fontWeight: 'bold' },
   subTitleHeader: { fontSize: 14, marginBottom: 20 },
   closeIcon: { padding: 5 },
   scrollContent: { paddingBottom: 20 },
+  
   inputGroup: { marginBottom: 15 },
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
   halfInput: { width: '48%' },
   label: { fontSize: 13, marginBottom: 6, fontWeight: '600' },
+  
   searchContainer: { flexDirection: 'row', alignItems: 'center', borderRadius: 10, borderWidth: 1, height: 50 },
   searchInput: { flex: 1, paddingHorizontal: 10, fontSize: 14, height: '100%' },
   dropdownButton: { borderRadius: 10, padding: 12, borderWidth: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: 50 },
   inputText: { fontSize: 14, flex: 1 },
+  
   accordionContent: { borderRadius: 8, marginTop: 8, borderWidth: 1, overflow: 'hidden' },
   dropdownItem: { paddingVertical: 14, paddingHorizontal: 12, borderBottomWidth: 1 },
   dropdownItemText: { fontSize: 14 },
   gridContainer: { flexDirection: 'row', flexWrap: 'wrap', padding: 10, justifyContent: 'space-between' },
+  
   timeChip: { width: '30%', paddingVertical: 10, marginBottom: 8, borderRadius: 8, alignItems: 'center', borderWidth: 1 },
   timeChipText: { fontSize: 13, fontWeight: '500' },
   textArea: { height: 80 },
+  
   footer: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 20, gap: 10 },
   btnCancel: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 12 },
   textCancel: { fontWeight: 'bold', fontSize: 15 },
   btnSave: { backgroundColor: COLORES.principal, paddingVertical: 12, paddingHorizontal: 30, borderRadius: 12, shadowColor: COLORES.principal, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, elevation: 3 },
   textSave: { color: COLORES.textoSobrePrincipal, fontWeight: 'bold', fontSize: 15 },
 
-  // ESTILOS OVERLAY ÉXITO
-  absoluteOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', zIndex: 9999, elevation: 20 },
-  successBox: { width: width * 0.8, borderRadius: 25, padding: 30, alignItems: 'center', shadowColor: "#000", shadowOffset: {width:0, height:5}, shadowOpacity:0.3, elevation:10 },
-  lottieContainer: { marginBottom: 10, alignItems: 'center', justifyContent: 'center' },
-  successTitle: { fontSize: 24, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' },
-  successMessage: { fontSize: 15, textAlign: 'center', marginBottom: 25, lineHeight: 22 },
-  btnSuccessConfirm: { backgroundColor: COLORES.principal, paddingVertical: 12, paddingHorizontal: 40, borderRadius: 30, elevation: 5 }
+  // --- ESTILOS VISTA ÉXITO ---
+  successContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+  },
+  successTitle: { 
+    fontSize: 24, fontWeight: 'bold', marginBottom: 10, textAlign: 'center' 
+  },
+  successMessage: { 
+    fontSize: 16, textAlign: 'center' 
+  }
 });
