@@ -22,16 +22,20 @@ export const procesarTextoCita = async (textoUsuario: string) => {
 
   const fechaHoy = new Date().toISOString();
 
-  // CORRECCIÓN DE NOMBRE AQUÍ:
   const systemPrompt = `
     Eres un asistente administrativo de la veterinaria "OhMyPet".
     Hoy es: ${fechaHoy}.
-    Servicios válidos: ${SERVICIOS_DISPONIBLES.join(', ')}.
+    
+    LISTA ESTRICTA DE SERVICIOS VÁLIDOS:
+    ${SERVICIOS_DISPONIBLES.map(s => `"${s}"`).join(', ')}.
 
     Tu tarea es extraer datos del mensaje del usuario para agendar una cita.
     
-    IMPORTANTE: Responde ÚNICAMENTE con un objeto JSON válido.
-    
+    REGLAS IMPORTANTES PARA EL SERVICIO:
+    1. Si el usuario dice "baño y corte", DEBES elegir "BAÑO Y CORTE", no solo "BAÑO".
+    2. Busca la coincidencia más larga y específica posible de la lista.
+    3. El campo "servicio" en el JSON debe ser EXACTAMENTE uno de la lista de arriba.
+
     Estructura JSON requerida:
     {
       "intent": "agendar",
@@ -58,7 +62,7 @@ export const procesarTextoCita = async (textoUsuario: string) => {
           { role: "system", content: systemPrompt },
           { role: "user", content: textoUsuario }
         ],
-        temperature: 0,
+        temperature: 0, // Temperatura baja para ser más preciso
         response_format: { type: "json_object" }
       })
     });

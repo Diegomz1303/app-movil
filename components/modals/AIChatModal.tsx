@@ -45,6 +45,9 @@ export default function AIChatModal({ visible, onClose, onSuccess }: AIChatModal
   const [processing, setProcessing] = useState(false);
   const [appointmentData, setAppointmentData] = useState<any>(null);
   
+  // NUEVO: Estado temporal para guardar datos de la IA mientras resolvemos duplicados
+  const [tempAiData, setTempAiData] = useState<any>(null);
+  
   // Estados Chat
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -55,18 +58,16 @@ export default function AIChatModal({ visible, onClose, onSuccess }: AIChatModal
   // Efecto de Entrada (Rebote) y Reset
   useEffect(() => {
     if (visible) {
-      // 1. Resetear estados
       setMessages([{
         id: 'welcome',
-        // CORRECCIÓN DE NOMBRE AQUÍ:
-        text: '¡Hola! 🤖 Bienvenido a OhMyPet. Dime algo como: "Agendar cita para Bobby mañana a las 10 para baño".',
+        text: '¡Hola! 🤖 Soy tu asistente de OhMyPet. Dime algo como: "Agendar baño y corte para Bobby mañana a las 10".',
         sender: 'ai'
       }]);
       setAppointmentData(null);
+      setTempAiData(null);
       setInputText('');
       setProcessing(false);
 
-      // 2. Animar entrada
       scaleValue.setValue(0);
       Animated.spring(scaleValue, {
         toValue: 1,
@@ -98,7 +99,6 @@ export default function AIChatModal({ visible, onClose, onSuccess }: AIChatModal
 
         await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
 
-        // Burbuja temporal
         addMessage('...', 'user', 'audio_placeholder');
 
         const { recording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
@@ -127,7 +127,6 @@ export default function AIChatModal({ visible, onClose, onSuccess }: AIChatModal
 
     try {
       const textoTranscrito = await transcribirAudio(audioUri);
-      
       setMessages(prev => prev.filter(m => m.type !== 'thinking')); 
 
       if (!textoTranscrito) {
@@ -166,6 +165,8 @@ export default function AIChatModal({ visible, onClose, onSuccess }: AIChatModal
 
           if (result.intent === 'agendar' && result.datos) {
               if (result.datos.nombre_mascota) {
+                  // Guardamos los datos que entendió la IA (servicio, fecha, hora)
+                  setTempAiData(result.datos); 
                   await buscarMascotaEnBD(result.datos, result.respuesta_natural);
               } else {
                   addMessage(result.respuesta_natural || "Faltan datos. ¿Cuál es el nombre de la mascota?", 'ai');
@@ -204,7 +205,7 @@ export default function AIChatModal({ visible, onClose, onSuccess }: AIChatModal
             : 'Sin dueño';
 
           setAppointmentData({
-              ...datosIA,
+              ...datosIA, // Aquí viene el servicio correcto ("Baño y Corte")
               mascota_id: mascota.id,
               cliente_id: mascota.cliente_id,
               nombre_mascota: mascota.nombre, 
@@ -237,7 +238,7 @@ export default function AIChatModal({ visible, onClose, onSuccess }: AIChatModal
       }
   };
 
-  const handleSelectDuplicate = (mascotaBD: any, datosPreviosIA: any) => {
+  const handleSelectDuplicate = (mascotaBD: any) => {
       const ownerName = mascotaBD.clientes 
         ? (mascotaBD.clientes as any).nombres 
         : 'sin dueño';
@@ -248,8 +249,12 @@ export default function AIChatModal({ visible, onClose, onSuccess }: AIChatModal
         ? `${(mascotaBD.clientes as any).nombres} ${(mascotaBD.clientes as any).apellidos}` 
         : 'Sin dueño';
 
+      // Usamos tempAiData para recuperar la fecha, hora y servicio originales
+      // Si por alguna razón se perdió, usamos valores por defecto seguros.
+      const datosFinales = tempAiData || { fecha: new Date().toISOString().split('T')[0], hora: '09:00', servicio: 'Consulta' };
+
       setAppointmentData({
-          ...datosPreviosIA,
+          ...datosFinales, // Aquí recuperamos "Baño y Corte"
           mascota_id: mascotaBD.id,
           cliente_id: mascotaBD.cliente_id,
           nombre_mascota: mascotaBD.nombre,
@@ -269,7 +274,7 @@ export default function AIChatModal({ visible, onClose, onSuccess }: AIChatModal
               cliente_id: appointmentData.cliente_id,
               fecha: appointmentData.fecha,
               hora: appointmentData.hora,
-              servicio: appointmentData.servicio,
+              servicio: appointmentData.servicio, // Ahora sí debería ser el correcto
               estado: 'pendiente',
               notas: 'Agendado por IA'
           });
@@ -315,13 +320,7 @@ export default function AIChatModal({ visible, onClose, onSuccess }: AIChatModal
                       <TouchableOpacity 
                           key={idx} 
                           style={[styles.optionBtn, { backgroundColor: theme.card, borderColor: theme.primary }]}
-                          onPress={() => {
-                              handleSelectDuplicate(opt.originalData, { 
-                                  fecha: new Date().toISOString().split('T')[0],
-                                  hora: '09:00',
-                                  servicio: 'Baño' 
-                              });
-                          }}
+                          onPress={() => handleSelectDuplicate(opt.originalData)}
                       >
                           <Text style={[styles.optionLabel, { color: theme.text }]}>{opt.label}</Text>
                           <Text style={[styles.optionSub, { color: theme.textSecondary }]}>{opt.subLabel}</Text>
@@ -450,7 +449,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
   
-  // Estilo Modal "Card" con rebote (no full screen sheet)
   modalView: {
     width: width * 0.9,
     height: height * 0.8,
