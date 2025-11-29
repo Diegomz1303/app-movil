@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "OhMyPet",
-    "slug": "ohmypet",
+    "slug": "VeterinariaPet",
     "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/logo-pet.png",
